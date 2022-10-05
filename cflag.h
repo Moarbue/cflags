@@ -8,22 +8,29 @@
 /// \param name  the name of the flag without dash
 /// \param desc  a short description of the flag
 /// \param def   the default value of the flag
-/// \returns a pointer to the value of the flag; be sure to first call cflag_parse()
+/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 bool * cflag_bool(const char *name, const char *desc, bool def);
 
 /// \brief Creates a new integer flag.
 /// \param name  the name of the flag without dash
 /// \param desc  a short description of the flag
 /// \param def   the default value of the flag
-/// \returns a pointer to the value of the flag; be sure to first call cflag_parse()
+/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 int * cflag_int(const char *name, const char* desc, int def);
 
 /// \brief Creates a new uint64 flag.
 /// \param name  the name of the flag without dash
 /// \param desc  a short description of the flag
 /// \param def   the default value of the flag
-/// \returns a pointer to the value of the flag; be sure to first call cflag_parse()
+/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def);
+
+/// \brief Creates a new floating-point-number flag.
+/// \param name  the name of the flag without dash
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
+float * cflag_float(const char *name, const char* desc, float def);
 
 /// \brief Parses the flags given to the program and checks for matching flags.
 /// The first entry of the argv array is removed by default.
@@ -40,7 +47,9 @@ bool cflag_parse(int argc, char **argv);
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <float.h>
 #include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -85,6 +94,7 @@ static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, con
 static char * cflag__shift_args(int *argc, char ***argv);
 static int cflag__str2int(int *out, char *s, int min, int max);
 static int cflag__str2uint64(uint64_t *out, char *s, uint64_t min, uint64_t max);
+static int cflag__str2float(float *out, char *s, float min, float max);
 
 
 bool * cflag_bool(const char *name, const char *desc, bool def)
@@ -115,6 +125,16 @@ uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
     flag->val.uint64 = def;
 
     return &flag->val.uint64;
+}
+
+float * cflag_float(const char *name, const char* desc, float def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_FLOAT, name, desc);
+
+    flag->def.floating = def;
+    flag->val.floating = def;
+
+    return &flag->val.floating;
 }
 
 bool cflag_parse(int argc, char **argv)
@@ -164,11 +184,26 @@ bool cflag_parse(int argc, char **argv)
                         char *arg = cflag__shift_args(&argc, &argv);
                         
                         uint64_t val;
-                        uint64_t res = cflag__str2uint64(&val, arg, 0, UINT64_MAX);
+                        int res = cflag__str2uint64(&val, arg, 0, UINT64_MAX);
 
                         if (res != 0) return false;
 
                         cflag_flags[i].val.uint64 = val;
+                    }
+                    break;
+
+                    case CFLAG_FLOAT: {
+                        // check if value was provided
+                        if(argc == 0) return false;
+                        // provied value as string
+                        char *arg = cflag__shift_args(&argc, &argv);
+
+                       float val;
+                       int res = cflag__str2float(&val, arg, -HUGE_VALF, HUGE_VALF); 
+
+                       if (res != 0) return false;
+
+                       cflag_flags[i].val.floating = val;
                     }
                     break;
 
@@ -254,6 +289,30 @@ static int cflag__str2uint64(uint64_t *out, char *s, uint64_t min, uint64_t max)
         return 1;
     if (min > res || res > max)
         return 3;
+    *out = res;
+    return 0;
+}
+
+// converts a string to a float and checks if the float is between the specified range
+static int cflag__str2float(float *out, char *s, float min, float max)
+{
+    char *end;
+    if (s[0] == '\0' || isspace(s[0]))
+        return 0;
+    errno = 1;
+    float res = strtof(s, &end);
+    if (res == HUGE_VALF && errno == ERANGE)
+        return 2;
+    if (res == -HUGE_VALF && errno == ERANGE)
+        return 2;
+    if (res < FLT_MIN && errno == ERANGE)
+        return 3;
+    if (res < -FLT_MIN && errno == ERANGE)
+        return 3;
+    if (*end != '\0')
+        return 1;
+    if (min > res || res > max)
+        return 4;
     *out = res;
     return 0;
 }
