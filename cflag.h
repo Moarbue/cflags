@@ -122,9 +122,9 @@ struct cflag_flag {
 #define CFLAG_MAX 128
 #endif // CFLAG_MAX
 
-static struct cflag_flag cflag_flags[CFLAG_MAX];
-static uint32_t cflag_count = 0;
-static cflag_error cflag_err = { .error = CFLAG_ERROR_NONE, .flag = NULL, .value = NULL };
+static struct cflag_flag cflag__flags[CFLAG_MAX];
+static uint32_t cflag__count = 0;
+static cflag_error cflag__err = { .error = CFLAG_ERROR_NONE, .flag = NULL, .value = NULL };
 
 
 // forward declaration of helper functions
@@ -205,13 +205,13 @@ bool cflag_parse(int argc, char **argv)
         if (*flag_name == '-') flag_name++;
 
         uint32_t i;
-        for (i = 0; i < cflag_count; ++i) {
+        for (i = 0; i < cflag__count; ++i) {
             // check if flag_name matches any of the declared flags
-            if (strcmp(cflag_flags[i].name, flag_name) == 0) {
+            if (strcmp(cflag__flags[i].name, flag_name) == 0) {
                 // check type of flag and parse accordingly
-                switch (cflag_flags[i].type) {
+                switch (cflag__flags[i].type) {
                     case CFLAG_BOOL: {
-                        cflag_flags[i].val.boolean = true;
+                        cflag__flags[i].val.boolean = true;
                     }
                     break;
 
@@ -232,7 +232,7 @@ bool cflag_parse(int argc, char **argv)
                             return false;
                         }
 
-                        cflag_flags[i].val.integer = val;
+                        cflag__flags[i].val.integer = val;
                     }
                     break;
 
@@ -253,7 +253,7 @@ bool cflag_parse(int argc, char **argv)
                             return false;
                         }
 
-                        cflag_flags[i].val.uint64 = val;
+                        cflag__flags[i].val.uint64 = val;
                     }
                     break;
 
@@ -274,7 +274,7 @@ bool cflag_parse(int argc, char **argv)
                             return false;
                         }
 
-                       cflag_flags[i].val.floating = val;
+                       cflag__flags[i].val.floating = val;
                     }
                     break;
 
@@ -287,7 +287,7 @@ bool cflag_parse(int argc, char **argv)
                         // provided value as string
                         char *arg = cflag__shift_args(&argc, &argv);
 
-                        cflag_flags[i].val.string = arg;
+                        cflag__flags[i].val.string = arg;
                     }
                     break;
 
@@ -302,7 +302,7 @@ bool cflag_parse(int argc, char **argv)
         }
         
         // check if we parsed the flag
-        if (i == cflag_count) {
+        if (i == cflag__count) {
             cflag__set_error(CFLAG_ERROR_UNKNOWN, flag_name, NULL);
             return false;
         }
@@ -312,33 +312,33 @@ bool cflag_parse(int argc, char **argv)
 
 void cflag_log_error(FILE *stream)
 {
-    switch (cflag_err.error) {
+    switch (cflag__err.error) {
         case CFLAG_ERROR_NONE:
             fprintf(stream, "No Error. Please only call cflag_log_error if flag_parse returned false!");
         break;
 
         case CFLAG_ERROR_UNKNOWN:
-            fprintf(stream, "ERROR: UNKNOWN flag \"-%s\"\n", cflag_err.flag);
+            fprintf(stream, "ERROR: UNKNOWN flag \"-%s\"\n", cflag__err.flag);
         break;
 
         case CFLAG_ERROR_NO_VALUE:
-            fprintf(stream, "ERROR: NO VALUE prodived for flag \"-%s\"\n", cflag_err.flag);
+            fprintf(stream, "ERROR: NO VALUE prodived for flag \"-%s\"\n", cflag__err.flag);
         break;
         
         case CFLAG_ERROR_INVALID_NUMBER:
-            fprintf(stream, "ERROR: INVALID VALUE for flag \"-%s\". Provided value was \"%s\"\n", cflag_err.flag, cflag_err.value);
+            fprintf(stream, "ERROR: INVALID VALUE for flag \"-%s\". Provided value was \"%s\"\n", cflag__err.flag, cflag__err.value);
         break;
         
         case CFLAG_ERROR_OVERFLOW:
-            fprintf(stream, "ERROR: OVERFLOW while parsing flag \"-%s\". Provided value was \"%s\"\n", cflag_err.flag, cflag_err.value);
+            fprintf(stream, "ERROR: OVERFLOW while parsing flag \"-%s\". Provided value was \"%s\"\n", cflag__err.flag, cflag__err.value);
         break;
         
         case CFLAG_ERROR_UNDERFLOW:
-            fprintf(stream, "ERROR: UNDERFLOW while parsing flag \"-%s\". Provided value was \"%s\"\n", cflag_err.flag, cflag_err.value);
+            fprintf(stream, "ERROR: UNDERFLOW while parsing flag \"-%s\". Provided value was \"%s\"\n", cflag__err.flag, cflag__err.value);
         break;
         
         case CFLAG_ERROR_OUT_OF_BOUNDS:
-            fprintf(stream, "ERROR: Value OUT OF BOUNDS for flag \"-%s\". Provided value was \"%s\"\n", cflag_err.flag, cflag_err.value);
+            fprintf(stream, "ERROR: Value OUT OF BOUNDS for flag \"-%s\". Provided value was \"%s\"\n", cflag__err.flag, cflag__err.value);
         break;
         
         case CFLAG_ERROR_COUNT:
@@ -348,7 +348,7 @@ void cflag_log_error(FILE *stream)
 }
 
 cflag_error cflag_get_error() {
-    return cflag_err;
+    return cflag__err;
 }
 
 
@@ -357,9 +357,9 @@ cflag_error cflag_get_error() {
 // allocate a new flag on the local stack with provided type, name and description
 static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, const char *desc)
 {
-    assert(cflag_count < CFLAG_MAX && "To many flags! Change size of CFLAG_MAX!");
+    assert(cflag__count < CFLAG_MAX && "To many flags! Change size of CFLAG_MAX!");
 
-    struct cflag_flag *flag = &cflag_flags[cflag_count++];
+    struct cflag_flag *flag = &cflag__flags[cflag__count++];
     memset(flag, 0, sizeof(*flag));
 
     flag->type  = type;
@@ -447,9 +447,9 @@ static int cflag__str2float(float *out, char *s, float min, float max)
 
 static void cflag__set_error(enum cflag_errors err, char *flag, char *value)
 {
-    cflag_err.error = err;
-    cflag_err.flag = flag;
-    cflag_err.value = value;
+    cflag__err.error = err;
+    cflag__err.flag = flag;
+    cflag__err.value = value;
 }
 
 #endif //CFLAG_IMPLEMENTATION
