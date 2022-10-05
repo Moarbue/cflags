@@ -78,9 +78,12 @@ void cflag_log_error(FILE *stream);
 /// the name of the flag that was processed when the error occured and optionally the value that was assigned to the flag
 cflag_error cflag_get_error();
 
+/// \brief Logs all flags, with description and default values.
+/// \param stream the stream to print to
+void cflag_log_options(FILE *stream, bool printdefault);
+
 #endif // _CFLAG_H
 
-#define CFLAG_IMPLEMENTATION
 #ifdef CFLAG_IMPLEMENTATION
 
 #include <ctype.h>
@@ -89,6 +92,7 @@ cflag_error cflag_get_error();
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 enum cflag_type {
@@ -349,6 +353,45 @@ void cflag_log_error(FILE *stream)
 
 cflag_error cflag_get_error() {
     return cflag__err;
+}
+
+void cflag_log_options(FILE *stream, bool printdefault)
+{
+    for (uint32_t i = 0; i < cflag__count; ++i) {
+		
+		fprintf(stream, "    -%s\n", cflag__flags[i].name);
+		fprintf(stream, "       %s\n", cflag__flags[i].desc);
+
+        if (!printdefault) continue;
+
+		switch(cflag__flags[i].type) {
+			case CFLAG_BOOL:
+				fprintf(stream, "       Default: %s\n", cflag__flags[i].def.boolean ? "true" : "false");
+			break;
+
+			case CFLAG_INT:
+				fprintf(stream, "       Default: %d\n", cflag__flags[i].def.integer);
+			break;
+
+			case CFLAG_UINT64:
+				fprintf(stream, "       Default: %ld\n", cflag__flags[i].def.uint64);
+			break;
+
+			case CFLAG_FLOAT:
+				fprintf(stream, "       Default: %f\n", cflag__flags[i].def.floating);
+			break;
+
+			case CFLAG_STRING:
+				fprintf(stream, "       Default: %s\n", cflag__flags[i].def.string);
+			break;
+
+			case CFLAG_TYPE_COUNT:
+			default:
+				assert(0 && "Unreachable, Unknown Type");
+				exit(69);
+			break;
+		}
+	}
 }
 
 
