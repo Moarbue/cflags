@@ -76,24 +76,11 @@ uint32_t cflag_count = 0;
 
 static char * cflag__shift_args(int *argc, char ***argv);
 static int cflag__str2int(int *out, char *s, int min, int max);
-
-struct cflag_flag *cflag_new(enum cflag_type type, const char *name, const char *desc)
-{
-    assert(cflag_count < CFLAG_MAX && "To many flags! Change size of CFLAG_MAX!");
-
-    struct cflag_flag *flag = &cflag_flags[cflag_count++];
-    memset(flag, 0, sizeof(*flag));
-
-    flag->type  = type;
-    flag->name = (char*) name;
-    flag->desc = (char*) desc;
-
-    return flag;
-}
+static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, const char *desc);
 
 bool * cflag_bool(const char *name, const char *desc, bool def)
 {
-    struct cflag_flag *flag = cflag_new(CFLAG_BOOL, name, desc);
+    struct cflag_flag *flag = cflag__new(CFLAG_BOOL, name, desc);
 
     flag->def.boolean = def;
     flag->val.boolean = def;
@@ -103,7 +90,7 @@ bool * cflag_bool(const char *name, const char *desc, bool def)
 
 int * cflag_int(const char *name, const char* desc, int def)
 {
-    struct cflag_flag *flag = cflag_new(CFLAG_INT, name, desc);
+    struct cflag_flag *flag = cflag__new(CFLAG_INT, name, desc);
 
     flag->def.integer = def;
     flag->val.integer = def;
@@ -169,6 +156,21 @@ bool cflag_parse(int argc, char **argv)
 
 
 // helper functions
+
+// allocate a new flag on the local stack with provided type, name and description
+static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, const char *desc)
+{
+    assert(cflag_count < CFLAG_MAX && "To many flags! Change size of CFLAG_MAX!");
+
+    struct cflag_flag *flag = &cflag_flags[cflag_count++];
+    memset(flag, 0, sizeof(*flag));
+
+    flag->type  = type;
+    flag->name = (char*) name;
+    flag->desc = (char*) desc;
+
+    return flag;
+}
 
 // shift flags by one position
 static char * cflag__shift_args(int *argc, char ***argv)
