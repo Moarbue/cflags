@@ -445,6 +445,7 @@ static int cflag__str2float(float *out, char *s, float min, float max)
     return CFLAG_ERROR_NONE;
 }
 
+// sets the values of the intern cflag_error instance
 static void cflag__set_error(enum cflag_errors err, char *flag, char *value)
 {
     cflag__err.error = err;
