@@ -1,8 +1,30 @@
 #ifndef _CFLAG_H
 #define _CFLAG_H
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+
+enum cflag_errors {
+    CFLAG_ERROR_NONE,
+    CFLAG_ERROR_UNKNOWN,
+    CFLAG_ERROR_NO_VALUE,
+    CFLAG_ERROR_INVALID_NUMBER,
+    CFLAG_ERROR_OVERFLOW,
+    CFLAG_ERROR_UNDERFLOW,
+    CFLAG_ERROR_OUT_OF_BOUNDS,
+
+    CFLAG_ERROR_COUNT,
+};
+static_assert(CFLAG_ERROR_COUNT == 7, "Exhaustive cflag_error definition!");
+
+typedef struct {
+    enum cflag_errors error;
+    char *flag;
+    char *value;
+} cflag_error;
+
 
 /// \brief Creates a new boolean flag.
 /// \param name  the name of the flag without dash
@@ -46,12 +68,21 @@ char ** cflag_string(const char *name, const char* desc, const char *def);
 /// \returns false on error.
 bool cflag_parse(int argc, char **argv);
 
+/// \brief Logs an error message to the specified stream. Note only call this function if flag_parse returned false.
+/// \param stream the stream to print to
+void cflag_log_error(FILE *stream);
+
+/// \brief Returns the current error. Only use this function if you want to handle errors yourself.
+/// Alternative is cflag_log_error(stream)
+/// \return returns a cflag_error struct, which provides the type of error (One of the CFLAG_ERROR_ constants),
+/// the name of the flag that was processed when the error occured and optionally the value that was assigned to the flag
+cflag_error cflag_get_error();
+
 #endif // _CFLAG_H
 
 #define CFLAG_IMPLEMENTATION
 #ifdef CFLAG_IMPLEMENTATION
 
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <float.h>
@@ -91,8 +122,9 @@ struct cflag_flag {
 #define CFLAG_MAX 128
 #endif // CFLAG_MAX
 
-struct cflag_flag cflag_flags[CFLAG_MAX];
-uint32_t cflag_count = 0;
+static struct cflag_flag cflag_flags[CFLAG_MAX];
+static uint32_t cflag_count = 0;
+static cflag_error cflag_err = { .error = CFLAG_ERROR_NONE, .flag = NULL, .value = NULL };
 
 
 // forward declaration of helper functions
@@ -102,6 +134,7 @@ static char * cflag__shift_args(int *argc, char ***argv);
 static int cflag__str2int(int *out, char *s, int min, int max);
 static int cflag__str2uint64(uint64_t *out, char *s, uint64_t min, uint64_t max);
 static int cflag__str2float(float *out, char *s, float min, float max);
+static void cflag__set_error(enum cflag_errors err, char *flag, char *value);
 
 
 bool * cflag_bool(const char *name, const char *desc, bool def)
@@ -163,7 +196,10 @@ bool cflag_parse(int argc, char **argv)
         char *flag_name = cflag__shift_args(&argc, &argv);
 
         // check if flag starts with a dash
-        if (*flag_name != '-') return false;
+        if (*flag_name != '-') {
+            cflag__set_error(CFLAG_ERROR_UNKNOWN, flag_name, NULL);
+            return false;
+        }
         flag_name++;
         // remove possible second dash for compability
         if (*flag_name == '-') flag_name++;
@@ -181,14 +217,20 @@ bool cflag_parse(int argc, char **argv)
 
                     case CFLAG_INT: {
                         // check if a value was provided
-                        if (argc == 0) return false;
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
                         // provided value as string
                         char *arg = cflag__shift_args(&argc, &argv);
 
                         int val;
                         int res = cflag__str2int(&val, arg, INT_MIN, INT_MAX);
 
-                        if (res != 0) return false;
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
 
                         cflag_flags[i].val.integer = val;
                     }
@@ -196,14 +238,20 @@ bool cflag_parse(int argc, char **argv)
 
                     case CFLAG_UINT64: {
                         // check if a value was provided
-                        if (argc == 0) return false;
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
                         // provided value as string
                         char *arg = cflag__shift_args(&argc, &argv);
                         
                         uint64_t val;
                         int res = cflag__str2uint64(&val, arg, 0, UINT64_MAX);
 
-                        if (res != 0) return false;
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
 
                         cflag_flags[i].val.uint64 = val;
                     }
@@ -211,14 +259,20 @@ bool cflag_parse(int argc, char **argv)
 
                     case CFLAG_FLOAT: {
                         // check if value was provided
-                        if (argc == 0) return false;
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
                         // provied value as string
                         char *arg = cflag__shift_args(&argc, &argv);
 
                        float val;
                        int res = cflag__str2float(&val, arg, -HUGE_VALF, HUGE_VALF); 
 
-                       if (res != 0) return false;
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
 
                        cflag_flags[i].val.floating = val;
                     }
@@ -226,7 +280,10 @@ bool cflag_parse(int argc, char **argv)
 
                     case CFLAG_STRING: {
                         // check if value was provided
-                        if (argc == 0) return false;
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
                         // provided value as string
                         char *arg = cflag__shift_args(&argc, &argv);
 
@@ -245,9 +302,53 @@ bool cflag_parse(int argc, char **argv)
         }
         
         // check if we parsed the flag
-        if (i == cflag_count) return false;
+        if (i == cflag_count) {
+            cflag__set_error(CFLAG_ERROR_UNKNOWN, flag_name, NULL);
+            return false;
+        }
     }
     return true;
+}
+
+void cflag_log_error(FILE *stream)
+{
+    switch (cflag_err.error) {
+        case CFLAG_ERROR_NONE:
+            fprintf(stream, "No Error. Please only call cflag_log_error if flag_parse returned false!");
+        break;
+
+        case CFLAG_ERROR_UNKNOWN:
+            fprintf(stream, "ERROR: UNKNOWN flag \"-%s\"\n", cflag_err.flag);
+        break;
+
+        case CFLAG_ERROR_NO_VALUE:
+            fprintf(stream, "ERROR: NO VALUE prodived for flag \"-%s\"\n", cflag_err.flag);
+        break;
+        
+        case CFLAG_ERROR_INVALID_NUMBER:
+            fprintf(stream, "ERROR: INVALID VALUE for flag \"-%s\". Provided value was \"%s\"\n", cflag_err.flag, cflag_err.value);
+        break;
+        
+        case CFLAG_ERROR_OVERFLOW:
+            fprintf(stream, "ERROR: OVERFLOW while parsing flag \"-%s\". Provided value was \"%s\"\n", cflag_err.flag, cflag_err.value);
+        break;
+        
+        case CFLAG_ERROR_UNDERFLOW:
+            fprintf(stream, "ERROR: UNDERFLOW while parsing flag \"-%s\". Provided value was \"%s\"\n", cflag_err.flag, cflag_err.value);
+        break;
+        
+        case CFLAG_ERROR_OUT_OF_BOUNDS:
+            fprintf(stream, "ERROR: Value OUT OF BOUNDS for flag \"-%s\". Provided value was \"%s\"\n", cflag_err.flag, cflag_err.value);
+        break;
+        
+        case CFLAG_ERROR_COUNT:
+        default:
+            assert(0 && "Unreachable, Unknown Error");
+    }
+}
+
+cflag_error cflag_get_error() {
+    return cflag_err;
 }
 
 
@@ -285,20 +386,20 @@ static char * cflag__shift_args(int *argc, char ***argv)
 static int cflag__str2int(int *out, char *s, int min, int max) {
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
-        return 0;
+        return CFLAG_ERROR_INVALID_NUMBER;
     errno = 1;
     long l = strtol(s, &end, 10);
     /* Both checks are needed because INT_MAX == LONG_MAX is possible. */
     if (l > INT_MAX || (errno == ERANGE && l == LONG_MAX))
-        return 2;
+        return CFLAG_ERROR_OVERFLOW;
     if (l < INT_MIN || (errno == ERANGE && l == LONG_MIN))
-        return 3;
+        return CFLAG_ERROR_UNDERFLOW;
     if (*end != '\0')
-        return 1;
+        return CFLAG_ERROR_INVALID_NUMBER;
     if (min > l || l > max)
-        return 4;
+        return CFLAG_ERROR_OUT_OF_BOUNDS;
     *out = l;
-    return 0;
+    return CFLAG_ERROR_NONE;
 }
 
 // converts a string to an uint64 and checks if the uint64 is between the specified range
@@ -307,17 +408,17 @@ static int cflag__str2uint64(uint64_t *out, char *s, uint64_t min, uint64_t max)
     static_assert(sizeof(unsigned long long int) == sizeof(uint64_t), "Please adjust to your needs.");
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
-        return 0;
+        return CFLAG_ERROR_INVALID_NUMBER;
     errno = 1;
     unsigned long long int res = strtoull(s, &end, 10);
     if (res == ULLONG_MAX && errno == ERANGE)
-        return 2;
+        return CFLAG_ERROR_OVERFLOW;
     if (*end != '\0')
-        return 1;
+        return CFLAG_ERROR_INVALID_NUMBER;
     if (min > res || res > max)
-        return 3;
+        return CFLAG_ERROR_OUT_OF_BOUNDS;
     *out = res;
-    return 0;
+    return CFLAG_ERROR_NONE;
 }
 
 // converts a string to a float and checks if the float is between the specified range
@@ -325,23 +426,30 @@ static int cflag__str2float(float *out, char *s, float min, float max)
 {
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
-        return 0;
+        return CFLAG_ERROR_INVALID_NUMBER;
     errno = 1;
     float res = strtof(s, &end);
     if (res == HUGE_VALF && errno == ERANGE)
-        return 2;
+        return CFLAG_ERROR_OVERFLOW;
     if (res == -HUGE_VALF && errno == ERANGE)
-        return 2;
+        return CFLAG_ERROR_OVERFLOW;
     if (res < FLT_MIN && errno == ERANGE)
-        return 3;
+        return CFLAG_ERROR_UNDERFLOW;
     if (res < -FLT_MIN && errno == ERANGE)
-        return 3;
+        return CFLAG_ERROR_UNDERFLOW;
     if (*end != '\0')
-        return 1;
+        return CFLAG_ERROR_INVALID_NUMBER;
     if (min > res || res > max)
-        return 4;
+        return CFLAG_ERROR_OUT_OF_BOUNDS;
     *out = res;
-    return 0;
+    return CFLAG_ERROR_NONE;
+}
+
+static void cflag__set_error(enum cflag_errors err, char *flag, char *value)
+{
+    cflag_err.error = err;
+    cflag_err.flag = flag;
+    cflag_err.value = value;
 }
 
 #endif //CFLAG_IMPLEMENTATION
