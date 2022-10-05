@@ -32,6 +32,13 @@ uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def);
 /// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 float * cflag_float(const char *name, const char* desc, float def);
 
+/// \brief Creates a new floating-point-number flag.
+/// \param name  the name of the flag without dash
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
+char ** cflag_string(const char *name, const char* desc, const char *def);
+
 /// \brief Parses the flags given to the program and checks for matching flags.
 /// The first entry of the argv array is removed by default.
 /// \param argc  argument count
@@ -137,6 +144,16 @@ float * cflag_float(const char *name, const char* desc, float def)
     return &flag->val.floating;
 }
 
+char ** cflag_string(const char *name, const char* desc, const char *def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_STRING, name, desc);
+
+    flag->def.string = (char*) def;
+    flag->val.string = (char*) def;
+
+    return &flag->val.string;
+}
+
 bool cflag_parse(int argc, char **argv)
 {
     // Remove first entry which is the program's name
@@ -194,7 +211,7 @@ bool cflag_parse(int argc, char **argv)
 
                     case CFLAG_FLOAT: {
                         // check if value was provided
-                        if(argc == 0) return false;
+                        if (argc == 0) return false;
                         // provied value as string
                         char *arg = cflag__shift_args(&argc, &argv);
 
@@ -204,6 +221,16 @@ bool cflag_parse(int argc, char **argv)
                        if (res != 0) return false;
 
                        cflag_flags[i].val.floating = val;
+                    }
+                    break;
+
+                    case CFLAG_STRING: {
+                        // check if value was provided
+                        if (argc == 0) return false;
+                        // provided value as string
+                        char *arg = cflag__shift_args(&argc, &argv);
+
+                        cflag_flags[i].val.string = arg;
                     }
                     break;
 
