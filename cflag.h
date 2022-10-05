@@ -2,6 +2,7 @@
 #define _CFLAG_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /// \brief Creates a new boolean flag.
 /// \param name  the name of the flag without dash
@@ -16,6 +17,13 @@ bool * cflag_bool(const char *name, const char *desc, bool def);
 /// \param def   the default value of the flag
 /// \returns a pointer to the value of the flag; be sure to first call cflag_parse()
 int * cflag_int(const char *name, const char* desc, int def);
+
+/// \brief Creates a new uint64 flag.
+/// \param name  the name of the flag without dash
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the value of the flag; be sure to first call cflag_parse()
+uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def);
 
 /// \brief Parses the flags given to the program and checks for matching flags.
 /// The first entry of the argv array is removed by default.
@@ -33,7 +41,6 @@ bool cflag_parse(int argc, char **argv);
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -74,9 +81,11 @@ uint32_t cflag_count = 0;
 
 // forward declaration of helper functions
 
+static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, const char *desc);
 static char * cflag__shift_args(int *argc, char ***argv);
 static int cflag__str2int(int *out, char *s, int min, int max);
-static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, const char *desc);
+static int cflag__str2uint64(uint64_t *out, char *s, uint64_t min, uint64_t max);
+
 
 bool * cflag_bool(const char *name, const char *desc, bool def)
 {
@@ -96,6 +105,16 @@ int * cflag_int(const char *name, const char* desc, int def)
     flag->val.integer = def;
 
     return &flag->val.integer;
+}
+
+uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_UINT64, name, desc);
+
+    flag->def.uint64 = def;
+    flag->val.uint64 = def;
+
+    return &flag->val.uint64;
 }
 
 bool cflag_parse(int argc, char **argv)
@@ -135,6 +154,21 @@ bool cflag_parse(int argc, char **argv)
                         if (res != 0) return false;
 
                         cflag_flags[i].val.integer = val;
+                    }
+                    break;
+
+                    case CFLAG_UINT64: {
+                        // check if a value was provided
+                        if (argc == 0) return false;
+                        // provided value as string
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        
+                        uint64_t val;
+                        uint64_t res = cflag__str2uint64(&val, arg, 0, UINT64_MAX);
+
+                        if (res != 0) return false;
+
+                        cflag_flags[i].val.uint64 = val;
                     }
                     break;
 
@@ -185,7 +219,7 @@ static char * cflag__shift_args(int *argc, char ***argv)
     return res;
 }
 
-// converts a string to a integer and checks if the integer is between the specified range
+// converts a string to an integer and checks if the integer is between the specified range
 static int cflag__str2int(int *out, char *s, int min, int max) {
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
@@ -202,6 +236,25 @@ static int cflag__str2int(int *out, char *s, int min, int max) {
     if (min > l || l > max)
         return 4;
     *out = l;
+    return 0;
+}
+
+// converts a string to an uint64 and checks if the uint64 is between the specified range
+static int cflag__str2uint64(uint64_t *out, char *s, uint64_t min, uint64_t max)
+{
+    static_assert(sizeof(unsigned long long int) == sizeof(uint64_t), "Please adjust to your needs.");
+    char *end;
+    if (s[0] == '\0' || isspace(s[0]))
+        return 0;
+    errno = 1;
+    unsigned long long int res = strtoull(s, &end, 10);
+    if (res == ULLONG_MAX && errno == ERANGE)
+        return 2;
+    if (*end != '\0')
+        return 1;
+    if (min > res || res > max)
+        return 3;
+    *out = res;
     return 0;
 }
 
