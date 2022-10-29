@@ -17,7 +17,9 @@ enum cflag_errors {
 
     CFLAG_ERROR_COUNT,
 };
+#if defined(static_assert)
 static_assert(CFLAG_ERROR_COUNT == 7, "Exhaustive cflag_error definition!");
+#endif
 
 typedef struct {
     enum cflag_errors error;
@@ -104,7 +106,9 @@ enum cflag_type {
 
     CFLAG_TYPE_COUNT,
 };
+#if defined(static_assert)
 static_assert(CFLAG_TYPE_COUNT == 5, "Exhaustive cflag_type definition!");
+#endif
 
 union cflag_value {
     bool     boolean;
@@ -448,7 +452,9 @@ static int cflag__str2int(int *out, char *s, int min, int max) {
 // converts a string to an uint64 and checks if the uint64 is between the specified range
 static int cflag__str2uint64(uint64_t *out, char *s, uint64_t min, uint64_t max)
 {
+    #if defined(static_assert)
     static_assert(sizeof(unsigned long long int) == sizeof(uint64_t), "Please adjust to your needs.");
+    #endif
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
         return CFLAG_ERROR_INVALID_NUMBER;
