@@ -8,15 +8,18 @@ int main(int argc, char **argv)
     // define some flags
 
     //                     name  description                   default 
-    bool *help = cflag_bool("h", "Prints all the flag options", false);
-    int *iter = cflag_int("i", "Print all integers up to i", 0);
-    uint64_t *number = cflag_uint64("n", "A uint64_t number which is printed before exiting the program", 0);
-    float *number2 = cflag_float("n2", "A floating point number which is printed before exiting the program", 0.f);
-    char **printme = cflag_string("s", "A string which is printed to stdout stream", NULL);
+    bool *help = cflag_bool("-h", "Prints this help menu", false);
+    int *iter = cflag_int("-i", "Print all integers up to i", 0);
+    uint64_t *number = cflag_uint64("-n", "A uint64_t number which is printed before exiting the program", 0);
+    float *number2 = cflag_float("-n2", "A floating point number which is printed before exiting the program", 0.f);
+    char **printme = cflag_string("-s", "A string which is printed to stdout stream", NULL);
 
     // parse all flags and check for errors
     if (!cflag_parse(argc, argv)) {
         cflag_log_error(stdout);
+        printf("Usage: %s [OPTIONS]\n", *argv);
+		printf("Options:\n");
+        cflag_log_options(stdout, true);
         return 1;
     }
 
