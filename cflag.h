@@ -63,6 +63,24 @@ float * cflag_float(const char *name, const char* desc, float def);
 /// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 char ** cflag_string(const char *name, const char* desc, const char *def);
 
+/// \brief Sets the minium and maximum value of a integer flag
+/// \param flag the flag (return value of call to cflag_int())
+/// \param min the minimum possible value of the flag
+/// \param max the maximum possible value of the flag
+void cflag_int_minmax(int *flag, int min, int max);
+
+/// \brief Sets the minium and maximum value of a uint64 flag
+/// \param flag the flag (return value of call to cflag_uint64())
+/// \param min the minimum possible value of the flag
+/// \param max the maximum possible value of the flag
+void cflag_uint64_minmax(uint64_t *flag, uint64_t min, uint64_t max);
+
+/// \brief Sets the minium and maximum value of a float flag
+/// \param flag the flag (return value of call to cflag_float())
+/// \param min the minimum possible value of the flag
+/// \param max the maximum possible value of the flag
+void cflag_float_minmax(float *flag, float min, float max);
+
 /// \brief Parses the flags given to the program and checks for matching flags.
 /// The first entry of the argv array is removed by default.
 /// \param argc  argument count
@@ -82,7 +100,9 @@ cflag_error cflag_get_error();
 
 /// \brief Logs all flags, with description and default values.
 /// \param stream the stream to print to
-void cflag_log_options(FILE *stream, bool printdefault);
+/// \param printdefault wheter to print the default value
+/// \param printminmax wheter to print minimum and maximum values, applies only to integer, uint64 and floating type flags
+void cflag_log_options(FILE *stream, bool printdefault, bool printminmax);
 
 #endif // _CFLAG_H
 
@@ -93,8 +113,9 @@ void cflag_log_options(FILE *stream, bool printdefault);
 #include <float.h>
 #include <limits.h>
 #include <math.h>
-#include <stdlib.h>
+#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 enum cflag_type {
@@ -124,6 +145,8 @@ struct cflag_flag {
     char *desc;      // short description
     union cflag_value def; // default value
     union cflag_value val; // current value
+    union cflag_value min; // minimun of value
+    union cflag_value max; // maximum of value
 };
 
 #ifndef CFLAG_MAX
@@ -161,6 +184,8 @@ int * cflag_int(const char *name, const char* desc, int def)
 
     flag->def.integer = def;
     flag->val.integer = def;
+    flag->min.integer = INT_MAX;
+    flag->max.integer = INT_MIN;
 
     return &flag->val.integer;
 }
@@ -171,6 +196,8 @@ uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
 
     flag->def.uint64 = def;
     flag->val.uint64 = def;
+    flag->min.uint64 = UINT64_MAX;
+    flag->min.uint64 = 0;
 
     return &flag->val.uint64;
 }
@@ -181,6 +208,8 @@ float * cflag_float(const char *name, const char* desc, float def)
 
     flag->def.floating = def;
     flag->val.floating = def;
+    flag->min.floating = -HUGE_VALF;
+    flag->max.floating = HUGE_VALF;
 
     return &flag->val.floating;
 }
@@ -193,6 +222,36 @@ char ** cflag_string(const char *name, const char* desc, const char *def)
     flag->val.string = (char*) def;
 
     return &flag->val.string;
+}
+
+void cflag_int_minmax(int *flag, int min, int max)
+{
+    size_t off_val = offsetof(struct cflag_flag, val);
+
+    struct cflag_flag *tmp = (struct cflag_flag *)((uintptr_t)flag - (uintptr_t)off_val);
+
+    tmp->min.integer = min;
+    tmp->max.integer = max;
+}
+
+void cflag_uint64_minmax(uint64_t *flag, uint64_t min, uint64_t max)
+{
+    size_t off_val = offsetof(struct cflag_flag, val);
+
+    struct cflag_flag *tmp = (struct cflag_flag *)((uintptr_t)flag - (uintptr_t)off_val);
+
+    tmp->min.uint64 = min;
+    tmp->max.uint64 = max;
+}
+
+void cflag_float_minmax(float *flag, float min, float max)
+{
+    size_t off_val = offsetof(struct cflag_flag, val);
+
+    struct cflag_flag *tmp = (struct cflag_flag *)((uintptr_t)flag - (uintptr_t)off_val);
+
+    tmp->min.floating = min;
+    tmp->max.floating = max;
 }
 
 bool cflag_parse(int argc, char **argv)
@@ -224,7 +283,7 @@ bool cflag_parse(int argc, char **argv)
                         char *arg = cflag__shift_args(&argc, &argv);
 
                         int val;
-                        int res = cflag__str2int(&val, arg, INT_MIN, INT_MAX);
+                        int res = cflag__str2int(&val, arg, cflag__flags[i].min.integer, cflag__flags[i].max.integer);
 
                         if (res != CFLAG_ERROR_NONE) {
                             cflag__set_error(res, flag_name, arg);
@@ -245,7 +304,7 @@ bool cflag_parse(int argc, char **argv)
                         char *arg = cflag__shift_args(&argc, &argv);
                         
                         uint64_t val;
-                        int res = cflag__str2uint64(&val, arg, 0, UINT64_MAX);
+                        int res = cflag__str2uint64(&val, arg, cflag__flags[i].min.uint64, cflag__flags[i].max.uint64);
 
                         if (res != CFLAG_ERROR_NONE) {
                             cflag__set_error(res, flag_name, arg);
@@ -265,15 +324,15 @@ bool cflag_parse(int argc, char **argv)
                         // provied value as string
                         char *arg = cflag__shift_args(&argc, &argv);
 
-                       float val;
-                       int res = cflag__str2float(&val, arg, -HUGE_VALF, HUGE_VALF); 
+                        float val;
+                        int res = cflag__str2float(&val, arg, cflag__flags[i].min.floating, cflag__flags[i].max.floating);
 
                         if (res != CFLAG_ERROR_NONE) {
                             cflag__set_error(res, flag_name, arg);
                             return false;
                         }
 
-                       cflag__flags[i].val.floating = val;
+                        cflag__flags[i].val.floating = val;
                     }
                     break;
 
@@ -353,34 +412,51 @@ cflag_error cflag_get_error() {
     return cflag__err;
 }
 
-void cflag_log_options(FILE *stream, bool printdefault)
+void cflag_log_options(FILE *stream, bool printdefault, bool printminmax)
 {
     for (uint32_t i = 0; i < cflag__count; ++i) {
 		
 		fprintf(stream, "    %s\n", cflag__flags[i].name);
 		fprintf(stream, "          %s\n", cflag__flags[i].desc);
 
-        if (!printdefault) continue;
+        if (!printdefault && !printminmax) continue;
 
 		switch(cflag__flags[i].type) {
 			case CFLAG_BOOL:
-				fprintf(stream, "          Default: %s\n", cflag__flags[i].def.boolean ? "true" : "false");
+                if (printdefault)
+				    fprintf(stream, "          Default: %s\n", cflag__flags[i].def.boolean ? "true" : "false");
 			break;
 
 			case CFLAG_INT:
-				fprintf(stream, "          Default: %d\n", cflag__flags[i].def.integer);
+                if (printdefault)
+				    fprintf(stream, "          Default: %d\n", cflag__flags[i].def.integer);
+                if (printminmax) {
+                    fprintf(stream, "          Min:     %d\n", cflag__flags[i].min.integer);
+                    fprintf(stream, "          Max:     %d\n", cflag__flags[i].max.integer);
+                }
 			break;
 
 			case CFLAG_UINT64:
-				fprintf(stream, "          Default: %ld\n", cflag__flags[i].def.uint64);
+                if (printdefault)
+				    fprintf(stream, "          Default: %ld\n", cflag__flags[i].def.uint64);
+                if (printminmax) {
+                    fprintf(stream, "          Min:     %ld\n", cflag__flags[i].min.uint64);
+                    fprintf(stream, "          Max:     %ld\n", cflag__flags[i].max.uint64);
+                }
 			break;
 
 			case CFLAG_FLOAT:
-				fprintf(stream, "          Default: %f\n", cflag__flags[i].def.floating);
+                if (printdefault)
+				    fprintf(stream, "          Default: %f\n", cflag__flags[i].def.floating);
+                if (printminmax) {
+                    fprintf(stream, "          Min:     %f\n", cflag__flags[i].min.floating);
+                    fprintf(stream, "          Max:     %f\n", cflag__flags[i].max.floating);
+                }
 			break;
 
 			case CFLAG_STRING:
-				fprintf(stream, "          Default: %s\n", cflag__flags[i].def.string);
+                if (printdefault)
+				    fprintf(stream, "          Default: %s\n", cflag__flags[i].def.string);
 			break;
 
 			case CFLAG_TYPE_COUNT:
