@@ -111,6 +111,7 @@ void cflag_log_options(FILE *stream, bool printdefault, bool printminmax);
 #include <ctype.h>
 #include <errno.h>
 #include <float.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <math.h>
 #include <stddef.h>
@@ -196,8 +197,8 @@ uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
 
     flag->def.uint64 = def;
     flag->val.uint64 = def;
-    flag->min.uint64 = UINT64_MAX;
     flag->min.uint64 = 0;
+    flag->max.uint64 = UINT64_MAX;
 
     return &flag->val.uint64;
 }
@@ -208,8 +209,8 @@ float * cflag_float(const char *name, const char* desc, float def)
 
     flag->def.floating = def;
     flag->val.floating = def;
-    flag->min.floating = -HUGE_VALF;
-    flag->max.floating = HUGE_VALF;
+    flag->min.floating = -FLT_MAX;
+    flag->max.floating = FLT_MAX;
 
     return &flag->val.floating;
 }
@@ -438,10 +439,10 @@ void cflag_log_options(FILE *stream, bool printdefault, bool printminmax)
 
 			case CFLAG_UINT64:
                 if (printdefault)
-				    fprintf(stream, "          Default: %ld\n", cflag__flags[i].def.uint64);
+				    fprintf(stream, "          Default: %" PRIu64 "\n", cflag__flags[i].def.uint64);
                 if (printminmax) {
-                    fprintf(stream, "          Min:     %ld\n", cflag__flags[i].min.uint64);
-                    fprintf(stream, "          Max:     %ld\n", cflag__flags[i].max.uint64);
+                    fprintf(stream, "          Min:     %" PRIu64 "\n", cflag__flags[i].min.uint64);
+                    fprintf(stream, "          Max:     %" PRIu64 "\n", cflag__flags[i].max.uint64);
                 }
 			break;
 
