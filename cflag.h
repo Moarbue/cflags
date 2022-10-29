@@ -150,11 +150,18 @@ struct cflag_flag {
     union cflag_value max; // maximum of value
 };
 
-#ifndef CFLAG_MAX
-#define CFLAG_MAX 128
-#endif // CFLAG_MAX
+#ifndef CFLAG_MAX_FLAGS
+#   define CFLAG_MAX_FLAGS 128
+#endif // CFLAG_MAX_FLAGS
 
-static struct cflag_flag cflag__flags[CFLAG_MAX];
+#ifndef CFLAG_MAX
+#   define CFLAG_MAX(A, B)               ((A) > (B) ? (A) : (B))
+#endif // CFLAG_MAX
+#ifndef CFLAG_MIN
+#   define CFLAG_MIN(A, B)               ((A) < (B) ? (A) : (B))
+#endif //CFLAG_MIN
+
+static struct cflag_flag cflag__flags[CFLAG_MAX_FLAGS];
 static uint32_t cflag__count = 0;
 static cflag_error cflag__err = { .error = CFLAG_ERROR_NONE, .flag = NULL, .value = NULL };
 
@@ -231,8 +238,8 @@ void cflag_int_minmax(int *flag, int min, int max)
 
     struct cflag_flag *tmp = (struct cflag_flag *)((uintptr_t)flag - (uintptr_t)off_val);
 
-    tmp->min.integer = min;
-    tmp->max.integer = max;
+    tmp->min.integer = CFLAG_MIN(min, max);
+    tmp->max.integer = CFLAG_MAX(min, max);
 }
 
 void cflag_uint64_minmax(uint64_t *flag, uint64_t min, uint64_t max)
@@ -241,8 +248,8 @@ void cflag_uint64_minmax(uint64_t *flag, uint64_t min, uint64_t max)
 
     struct cflag_flag *tmp = (struct cflag_flag *)((uintptr_t)flag - (uintptr_t)off_val);
 
-    tmp->min.uint64 = min;
-    tmp->max.uint64 = max;
+    tmp->min.uint64 = CFLAG_MIN(min, max);
+    tmp->max.uint64 = CFLAG_MAX(min, max);
 }
 
 void cflag_float_minmax(float *flag, float min, float max)
@@ -251,8 +258,8 @@ void cflag_float_minmax(float *flag, float min, float max)
 
     struct cflag_flag *tmp = (struct cflag_flag *)((uintptr_t)flag - (uintptr_t)off_val);
 
-    tmp->min.floating = min;
-    tmp->max.floating = max;
+    tmp->min.floating = CFLAG_MIN(min, max);
+    tmp->max.floating = CFLAG_MAX(min, max);
 }
 
 bool cflag_parse(int argc, char **argv)
@@ -475,7 +482,7 @@ void cflag_log_options(FILE *stream, bool printdefault, bool printminmax)
 // allocate a new flag on the local stack with provided type, name and description
 static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, const char *desc)
 {
-    assert(cflag__count < CFLAG_MAX && "To many flags! Change size of CFLAG_MAX!");
+    assert(cflag__count < CFLAG_MAX_FLAGS && "To many flags! Define #CFLAG_MAX_FLAGS to be a bigger number!");
 
     struct cflag_flag *flag = &cflag__flags[cflag__count++];
     memset(flag, 0, sizeof(*flag));
