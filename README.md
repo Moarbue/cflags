@@ -13,14 +13,22 @@ Just include **[flags.h](https://github.com/Moarbue/c-flags/blob/main/flags.h)**
 Creating a new flag:
 ```C
 
-// name: name of the flag, (without dash)
+// name: name of the flag
 // desc: short description of the flag
 // def: default value of the flag
-bool *flag = cflag_bool(const char *name, const bool def, const char *desc);
+bool *flag = cflag_bool(const char *name, const char *desc, const bool def);
 
-char *flag2 = cflag_string(const char *name, const char *def, const char *desc);
+char **flag2 = cflag_string(const char *name, const char *desc, const char *def);
 
 ...
+
+```
+Setting bounds for the flags:
+```C
+
+cflag_int_minmax   (int      *flag, int      min, int      max);
+cflag_uint64_minmax(uint64_t *flag, uint64_t min, uint64_t max);
+cflag_float_minmax (float    *flag, float    min, float    max);
 
 ```
 
@@ -53,9 +61,9 @@ Log all available options (to view output see example.c):
 ```C
 
 // You can also print a useful message, where all the names, descriptions and optionally
-// default values of the created flags are printed
-//               stream   printdefault
-cflag_log_options(stdout, true);
+// default values and bounds of the created flags are printed
+//               stream   printdefault  printminmax
+cflag_log_options(stdout, true,         true);
 
 ```
 
