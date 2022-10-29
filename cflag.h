@@ -29,35 +29,35 @@ typedef struct {
 
 
 /// \brief Creates a new boolean flag.
-/// \param name  the name of the flag without dash
+/// \param name  the name of the flag
 /// \param desc  a short description of the flag
 /// \param def   the default value of the flag
 /// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 bool * cflag_bool(const char *name, const char *desc, bool def);
 
 /// \brief Creates a new integer flag.
-/// \param name  the name of the flag without dash
+/// \param name  the name of the flag
 /// \param desc  a short description of the flag
 /// \param def   the default value of the flag
 /// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 int * cflag_int(const char *name, const char* desc, int def);
 
 /// \brief Creates a new uint64 flag.
-/// \param name  the name of the flag without dash
+/// \param name  the name of the flag
 /// \param desc  a short description of the flag
 /// \param def   the default value of the flag
 /// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def);
 
 /// \brief Creates a new floating-point-number flag.
-/// \param name  the name of the flag without dash
+/// \param name  the name of the flag
 /// \param desc  a short description of the flag
 /// \param def   the default value of the flag
 /// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 float * cflag_float(const char *name, const char* desc, float def);
 
 /// \brief Creates a new floating-point-number flag.
-/// \param name  the name of the flag without dash
+/// \param name  the name of the flag
 /// \param desc  a short description of the flag
 /// \param def   the default value of the flag
 /// \returns a pointer to the value of the flag; be sure to call cflag_parse()
@@ -120,7 +120,7 @@ union cflag_value {
 
 struct cflag_flag {
     enum cflag_type type; //value of the enum cflag_type
-    char *name;      // name without dash
+    char *name;      // name
     char *desc;      // short description
     union cflag_value def; // default value
     union cflag_value val; // current value
@@ -202,15 +202,6 @@ bool cflag_parse(int argc, char **argv)
 
     while (argc > 0) {
         char *flag_name = cflag__shift_args(&argc, &argv);
-
-        // check if flag starts with a dash
-        if (*flag_name != '-') {
-            cflag__set_error(CFLAG_ERROR_UNKNOWN, flag_name, NULL);
-            return false;
-        }
-        flag_name++;
-        // remove possible second dash for compability
-        if (*flag_name == '-') flag_name++;
 
         uint32_t i;
         for (i = 0; i < cflag__count; ++i) {
@@ -320,33 +311,36 @@ bool cflag_parse(int argc, char **argv)
 
 void cflag_log_error(FILE *stream)
 {
+    char cflag__type[] = "command";
+    if (cflag__err.flag != NULL && *cflag__err.flag == '-') strcpy(cflag__type, "flag");
+    
     switch (cflag__err.error) {
         case CFLAG_ERROR_NONE:
-            fprintf(stream, "No Error. Please only call cflag_log_error if flag_parse returned false!");
+            fprintf(stream, "No Error. Please only call cflag_log_error if flag_parse returned false!\n");
         break;
 
         case CFLAG_ERROR_UNKNOWN:
-            fprintf(stream, "ERROR: UNKNOWN flag \"-%s\"\n", cflag__err.flag);
+            fprintf(stream, "ERROR: UNKNOWN %s \"%s\"\n", cflag__type, cflag__err.flag);
         break;
 
         case CFLAG_ERROR_NO_VALUE:
-            fprintf(stream, "ERROR: NO VALUE prodived for flag \"-%s\"\n", cflag__err.flag);
+            fprintf(stream, "ERROR: NO VALUE prodived for %s \"%s\"\n", cflag__type, cflag__err.flag);
         break;
         
         case CFLAG_ERROR_INVALID_NUMBER:
-            fprintf(stream, "ERROR: INVALID VALUE for flag \"-%s\". Provided value was \"%s\"\n", cflag__err.flag, cflag__err.value);
+            fprintf(stream, "ERROR: INVALID VALUE for %s \"%s\". Provided value was \"%s\"\n", cflag__type, cflag__err.flag, cflag__err.value);
         break;
         
         case CFLAG_ERROR_OVERFLOW:
-            fprintf(stream, "ERROR: OVERFLOW while parsing flag \"-%s\". Provided value was \"%s\"\n", cflag__err.flag, cflag__err.value);
+            fprintf(stream, "ERROR: OVERFLOW while parsing %s \"%s\". Provided value was \"%s\"\n", cflag__type, cflag__err.flag, cflag__err.value);
         break;
         
         case CFLAG_ERROR_UNDERFLOW:
-            fprintf(stream, "ERROR: UNDERFLOW while parsing flag \"-%s\". Provided value was \"%s\"\n", cflag__err.flag, cflag__err.value);
+            fprintf(stream, "ERROR: UNDERFLOW while parsing %s \"%s\". Provided value was \"%s\"\n", cflag__type, cflag__err.flag, cflag__err.value);
         break;
         
         case CFLAG_ERROR_OUT_OF_BOUNDS:
-            fprintf(stream, "ERROR: Value OUT OF BOUNDS for flag \"-%s\". Provided value was \"%s\"\n", cflag__err.flag, cflag__err.value);
+            fprintf(stream, "ERROR: Value OUT OF BOUNDS for %s \"%s\". Provided value was \"%s\"\n", cflag__type, cflag__err.flag, cflag__err.value);
         break;
         
         case CFLAG_ERROR_COUNT:
@@ -363,30 +357,30 @@ void cflag_log_options(FILE *stream, bool printdefault)
 {
     for (uint32_t i = 0; i < cflag__count; ++i) {
 		
-		fprintf(stream, "    -%s\n", cflag__flags[i].name);
-		fprintf(stream, "       %s\n", cflag__flags[i].desc);
+		fprintf(stream, "    %s\n", cflag__flags[i].name);
+		fprintf(stream, "          %s\n", cflag__flags[i].desc);
 
         if (!printdefault) continue;
 
 		switch(cflag__flags[i].type) {
 			case CFLAG_BOOL:
-				fprintf(stream, "       Default: %s\n", cflag__flags[i].def.boolean ? "true" : "false");
+				fprintf(stream, "          Default: %s\n", cflag__flags[i].def.boolean ? "true" : "false");
 			break;
 
 			case CFLAG_INT:
-				fprintf(stream, "       Default: %d\n", cflag__flags[i].def.integer);
+				fprintf(stream, "          Default: %d\n", cflag__flags[i].def.integer);
 			break;
 
 			case CFLAG_UINT64:
-				fprintf(stream, "       Default: %ld\n", cflag__flags[i].def.uint64);
+				fprintf(stream, "          Default: %ld\n", cflag__flags[i].def.uint64);
 			break;
 
 			case CFLAG_FLOAT:
-				fprintf(stream, "       Default: %f\n", cflag__flags[i].def.floating);
+				fprintf(stream, "          Default: %f\n", cflag__flags[i].def.floating);
 			break;
 
 			case CFLAG_STRING:
-				fprintf(stream, "       Default: %s\n", cflag__flags[i].def.string);
+				fprintf(stream, "          Default: %s\n", cflag__flags[i].def.string);
 			break;
 
 			case CFLAG_TYPE_COUNT:
