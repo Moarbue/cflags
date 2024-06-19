@@ -192,8 +192,8 @@ int * cflag_int(const char *name, const char* desc, int def)
 
     flag->def.integer = def;
     flag->val.integer = def;
-    flag->min.integer = INT_MAX;
-    flag->max.integer = INT_MIN;
+    flag->min.integer = INT_MIN;
+    flag->max.integer = INT_MAX;
 
     return &flag->val.integer;
 }
