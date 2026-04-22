@@ -240,9 +240,12 @@ static cflag_error cflag__err = { .error = CFLAG_ERROR_NONE, .flag = NULL, .valu
 static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, const char *desc);
 static char * cflag__shift_args(int *argc, char ***argv);
 static void cflag__set_error(enum cflag_errors err, char *flag, char *value);
+static int cflag__str2int_generic(int64_t *out, char *s, int64_t min, int64_t max);
+static int cflag__str2uint_generic(uint64_t *out, char *s, uint64_t min, uint64_t max);
+static int cflag__str2float_generic(long double *out, char *s, long double min, long double max);
 
-#define CFLAG_REF_IMPL(type_enum, type_t, field_name) \
-void cflag_##type_t##_ref(const char *name, const char *desc, type_t *ref, type_t def) \
+#define CFLAG_REF_IMPL(type_enum, type_name, type_t, field_name) \
+void cflag_##type_name##_ref(const char *name, const char *desc, type_t *ref, type_t def) \
 { \
     struct cflag_flag *flag = cflag__new(type_enum, name, desc); \
     flag->def.field_name = def; \
@@ -250,31 +253,37 @@ void cflag_##type_t##_ref(const char *name, const char *desc, type_t *ref, type_
     flag->value_ptr = ref; \
 }
 
-CFLAG_REF_IMPL(CFLAG_BOOL, bool, boolean)
-CFLAG_REF_IMPL(CFLAG_CHAR, char, character)
-CFLAG_REF_IMPL(CFLAG_INT8, int8_t, int8)
-CFLAG_REF_IMPL(CFLAG_UINT8, uint8_t, uint8)
-CFLAG_REF_IMPL(CFLAG_INT16, int16_t, int16)
-CFLAG_REF_IMPL(CFLAG_UINT16, uint16_t, uint16)
-CFLAG_REF_IMPL(CFLAG_INT32, int32_t, int32)
-CFLAG_REF_IMPL(CFLAG_UINT32, uint32_t, uint32)
-CFLAG_REF_IMPL(CFLAG_INT64, int64_t, int64)
-CFLAG_REF_IMPL(CFLAG_UINT64, uint64_t, uint64)
-CFLAG_REF_IMPL(CFLAG_FLOAT, float, floating)
-CFLAG_REF_IMPL(CFLAG_DOUBLE, double, double_val)
-CFLAG_REF_IMPL(CFLAG_LONG_DOUBLE, long double, long_double)
+CFLAG_REF_IMPL(CFLAG_BOOL, bool, bool, boolean)
+CFLAG_REF_IMPL(CFLAG_CHAR, char, char, character)
+CFLAG_REF_IMPL(CFLAG_INT8, int8, int8_t, int8)
+CFLAG_REF_IMPL(CFLAG_UINT8, uint8, uint8_t, uint8)
+CFLAG_REF_IMPL(CFLAG_INT16, int16, int16_t, int16)
+CFLAG_REF_IMPL(CFLAG_UINT16, uint16, uint16_t, uint16)
+CFLAG_REF_IMPL(CFLAG_INT32, int32, int32_t, int32)
+CFLAG_REF_IMPL(CFLAG_UINT32, uint32, uint32_t, uint32)
+CFLAG_REF_IMPL(CFLAG_INT64, int64, int64_t, int64)
+CFLAG_REF_IMPL(CFLAG_UINT64, uint64, uint64_t, uint64)
+CFLAG_REF_IMPL(CFLAG_FLOAT, float, float, floating)
+CFLAG_REF_IMPL(CFLAG_DOUBLE, double, double, double_val)
+
+void cflag_long_double_ref(const char *name, const char *desc, long double *ref, long double def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_LONG_DOUBLE, name, desc);
+    flag->def.long_double = def;
+    *ref = def;
+    flag->value_ptr = ref;
+}
 
 void cflag_int_ref(const char *name, const char* desc, int *ref, int def)
 {
-#if sizeof(int) == 8
-    cflag_int64_ref(name, desc, (int64_t *)ref, (int64_t)def);
-#elif sizeof(int) == 4
-    cflag_int32_ref(name, desc, (int32_t *)ref, (int32_t)def);
-#elif sizeof(int) == 2
-    cflag_int16_ref(name, desc, (int16_t *)ref, (int16_t)def);
-#else
-    cflag_int8_ref(name, desc, (int8_t *)ref, (int8_t)def);
-#endif
+    if (sizeof(int) == 8)
+        cflag_int64_ref(name, desc, (int64_t *)ref, (int64_t)def);
+    else if (sizeof(int) == 4)
+        cflag_int32_ref(name, desc, (int32_t *)ref, (int32_t)def);
+    else if (sizeof(int) == 2)
+        cflag_int16_ref(name, desc, (int16_t *)ref, (int16_t)def);
+    else
+        cflag_int8_ref(name, desc, (int8_t *)ref, (int8_t)def);
 }
 
 void cflag_string_ref(const char *name, const char* desc, char **ref, const char *def)
@@ -396,15 +405,14 @@ uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
 
 int * cflag_int(const char *name, const char* desc, int def)
 {
-#if sizeof(int) == 8
-    return (int *)cflag_int64(name, desc, (int64_t)def);
-#elif sizeof(int) == 4
-    return (int *)cflag_int32(name, desc, (int32_t)def);
-#elif sizeof(int) == 2
-    return (int *)cflag_int16(name, desc, (int16_t)def);
-#else
-    return (int *)cflag_int8(name, desc, (int8_t)def);
-#endif
+    if (sizeof(int) == 8)
+        return (int *)cflag_int64(name, desc, (int64_t)def);
+    else if (sizeof(int) == 4)
+        return (int *)cflag_int32(name, desc, (int32_t)def);
+    else if (sizeof(int) == 2)
+        return (int *)cflag_int16(name, desc, (int16_t)def);
+    else
+        return (int *)cflag_int8(name, desc, (int8_t)def);
 }
 
 float * cflag_float(const char *name, const char* desc, float def)
