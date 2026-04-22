@@ -268,6 +268,7 @@ struct cargs_flag {
 
 static struct cargs_flag cargs__flags[CARGS_MAX_FLAGS];
 static uint32_t cargs__count = 0;
+static bool cargs__parsed = false;
 static cargs_error cargs__err = { .error = CARGS_ERROR_NONE, .flag = NULL, .value = NULL };
 
 // Forward declarations
@@ -532,6 +533,12 @@ char ** cargs_positional(const char *name, const char *desc, bool mandatory)
  
 bool cargs_parse(int argc, char **argv)
 {
+    if (cargs__parsed) {
+        cargs__set_error(CARGS_ERROR_UNKNOWN, "cargs_parse", NULL);
+        return false;
+    }
+    cargs__parsed = true;
+
     // Remove first entry which is the program's name
     cargs__shift_args(&argc, &argv);
 
@@ -917,7 +924,7 @@ void cargs_log_options(FILE *stream, bool printdefault)
 			break;
 
 		case CARGS_STRING:
-			fprintf(stream, "          Default: %s\n", cargs__flags[i].def.string);
+			fprintf(stream, "          Default: %s\n", cargs__flags[i].def.string ? cargs__flags[i].def.string : "(NULL)");
 			break;
 
 		case CARGS_SIZE_T:
@@ -940,6 +947,13 @@ void cargs_log_options(FILE *stream, bool printdefault)
 // allocate a new flag on the local stack with provided type, name and description
 static struct cargs_flag *cargs__new(enum cargs_type type, const char *name, const char *desc)
 {
+    // Check for duplicate flag name
+    for (uint32_t j = 0; j < cargs__count; ++j) {
+        if (strcmp(cargs__flags[j].name, name) == 0) {
+            assert(0 && "Duplicate flag name!");
+        }
+    }
+
     assert(cargs__count < CARGS_MAX_FLAGS && "To many flags! Define #CARGS_MAX_FLAGS to be a bigger number!");
 
     struct cargs_flag *flag = &cargs__flags[cargs__count++];
