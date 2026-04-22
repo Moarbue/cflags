@@ -12,14 +12,15 @@
 
 
 
+/// \brief Error codes returned by the library during parsing.
 enum cflag_errors {
-    CFLAG_ERROR_NONE,
-    CFLAG_ERROR_UNKNOWN,
-    CFLAG_ERROR_NO_VALUE,
-    CFLAG_ERROR_INVALID_NUMBER,
-    CFLAG_ERROR_OVERFLOW,
-    CFLAG_ERROR_UNDERFLOW,
-    CFLAG_ERROR_OUT_OF_BOUNDS,
+    CFLAG_ERROR_NONE,           ///< No error occurred.
+    CFLAG_ERROR_UNKNOWN,        ///< An unknown flag was provided.
+    CFLAG_ERROR_NO_VALUE,       ///< A flag requiring a value was provided without one.
+    CFLAG_ERROR_INVALID_NUMBER, ///< The provided value could not be parsed as a number.
+    CFLAG_ERROR_OVERFLOW,       ///< The provided number exceeds the maximum representable value.
+    CFLAG_ERROR_UNDERFLOW,      ///< The provided number is below the minimum representable value.
+    CFLAG_ERROR_OUT_OF_BOUNDS,  ///< The value is outside the specified range (unused in current version).
 
     CFLAG_ERROR_COUNT,
 };
@@ -27,90 +28,144 @@ enum cflag_errors {
 static_assert(CFLAG_ERROR_COUNT == 7, "Exhaustive cflag_error definition!");
 #endif
 
+/// \brief Contains detailed information about a parsing error.
 typedef struct {
-    enum cflag_errors error;
-    char *flag;
-    char *value;
+    enum cflag_errors error; ///< The type of error that occurred.
+    char *flag;              ///< The name of the flag that caused the error.
+    char *value;             ///< The value that caused the error (if applicable).
 } cflag_error;
 
 
 /// \brief Creates a new boolean flag.
+/// \param name  the name of the flag (e.g., "-v")
+/// \param desc  a short description of the flag for help output
+/// \param def   the default value of the flag
+/// \returns a pointer to the flag's value; call cflag_parse() to update it.
 bool * cflag_bool(const char *name, const char *desc, bool def);
+/// \brief Binds a boolean flag to an external variable.
+/// \param name  the name of the flag
+/// \param desc  a short description of the flag
+/// \param ref   pointer to the external variable to update
+/// \param def   the default value to initialize the variable with
 void cflag_bool_ref(const char *name, const char *desc, bool *ref, bool def);
 
 /// \brief Creates a new char flag.
-char * cflag_char(const char *name, const char *desc, char def);
-void cflag_char_ref(const char *name, const char *desc, char *ref, char def);
-
-/// \brief Creates a new int8 flag.
-int8_t * cflag_int8(const char *name, const char *desc, int8_t def);
-void cflag_int8_ref(const char *name, const char *desc, int8_t *ref, int8_t def);
-uint8_t * cflag_uint8(const char *name, const char *desc, uint8_t def);
-void cflag_uint8_ref(const char *name, const char *desc, uint8_t *ref, uint8_t def);
-
-/// \brief Creates a new int16 flag.
-int16_t * cflag_int16(const char *name, const char *desc, int16_t def);
-void cflag_int16_ref(const char *name, const char *desc, int16_t *ref, int16_t def);
-uint16_t * cflag_uint16(const char *name, const char *desc, uint16_t def);
-void cflag_uint16_ref(const char *name, const char *desc, uint16_t *ref, uint16_t def);
-
-/// \brief Creates a new int32 flag.
-int32_t * cflag_int32(const char *name, const char *desc, int32_t def);
-void cflag_int32_ref(const char *name, const char *desc, int32_t *ref, int32_t def);
-uint32_t * cflag_uint32(const char *name, const char *desc, uint32_t def);
-void cflag_uint32_ref(const char *name, const char *desc, uint32_t *ref, uint32_t def);
-
-/// \brief Creates a new int64 flag.
-int64_t * cflag_int64(const char *name, const char *desc, int64_t def);
-void cflag_int64_ref(const char *name, const char *desc, int64_t *ref, int64_t def);
-uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def);
-void cflag_uint64_ref(const char *name, const char *desc, uint64_t *ref, uint64_t def);
-
-/// \brief Creates a new integer flag.
-int * cflag_int(const char *name, const char* desc, int def);
-void cflag_int_ref(const char *name, const char* desc, int *ref, int def);
-
-/// \brief Creates a new floating-point-number flag.
-float * cflag_float(const char *name, const char* desc, float def);
-void cflag_float_ref(const char *name, const char* desc, float *ref, float def);
-double * cflag_double(const char *name, const char* desc, double def);
-void cflag_double_ref(const char *name, const char* desc, double *ref, double def);
-long double * cflag_long_double(const char *name, const char* desc, long double def);
-void cflag_long_double_ref(const char *name, const char* desc, long double *ref, long double def);
-
-/// \brief Creates a new string flag.
-char ** cflag_string(const char *name, const char* desc, const char *def);
-void cflag_string_ref(const char *name, const char* desc, char **ref, const char *def);
-
-
-/// \brief Creates a new floating-point-number flag.
 /// \param name  the name of the flag
 /// \param desc  a short description of the flag
 /// \param def   the default value of the flag
-/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
+/// \returns a pointer to the flag's value.
+char * cflag_char(const char *name, const char *desc, char def);
+/// \brief Binds a char flag to an external variable.
+void cflag_char_ref(const char *name, const char *desc, char *ref, char def);
+
+/// \brief Creates a new int8 flag.
+/// \param name  the name of the flag
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the flag's value.
+int8_t * cflag_int8(const char *name, const char *desc, int8_t def);
+/// \brief Binds an int8 flag to an external variable.
+void cflag_int8_ref(const char *name, const char *desc, int8_t *ref, int8_t def);
+/// \brief Creates a new uint8 flag.
+uint8_t * cflag_uint8(const char *name, const char *desc, uint8_t def);
+/// \brief Binds a uint8 flag to an external variable.
+void cflag_uint8_ref(const char *name, const char *desc, uint8_t *ref, uint8_t def);
+
+/// \brief Creates a new int16 flag.
+/// \param name  the name of the flag
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the flag's value.
+int16_t * cflag_int16(const char *name, const char *desc, int16_t def);
+/// \brief Binds an int16 flag to an external variable.
+void cflag_int16_ref(const char *name, const char *desc, int16_t *ref, int16_t def);
+/// \brief Creates a new uint16 flag.
+uint16_t * cflag_uint16(const char *name, const char *desc, uint16_t def);
+/// \brief Binds a uint16 flag to an external variable.
+void cflag_uint16_ref(const char *name, const char *desc, uint16_t *ref, uint16_t def);
+
+/// \brief Creates a new int32 flag.
+/// \param name  the name of the flag
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the flag's value.
+int32_t * cflag_int32(const char *name, const char *desc, int32_t def);
+/// \brief Binds an int32 flag to an external variable.
+void cflag_int32_ref(const char *name, const char *desc, int32_t *ref, int32_t def);
+/// \brief Creates a new uint32 flag.
+uint32_t * cflag_uint32(const char *name, const char *desc, uint32_t def);
+/// \brief Binds a uint32 flag to an external variable.
+void cflag_uint32_ref(const char *name, const char *desc, uint32_t *ref, uint32_t def);
+
+/// \brief Creates a new int64 flag.
+/// \param name  the name of the flag
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the flag's value.
+int64_t * cflag_int64(const char *name, const char *desc, int64_t def);
+/// \brief Binds an int64 flag to an external variable.
+void cflag_int64_ref(const char *name, const char *desc, int64_t *ref, int64_t def);
+/// \brief Creates a new uint64 flag.
+uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def);
+/// \brief Binds a uint64 flag to an external variable.
+void cflag_uint64_ref(const char *name, const char *desc, uint64_t *ref, uint64_t def);
+
+/// \brief Creates a new integer flag (width determined by platform).
+/// \param name  the name of the flag
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the flag's value.
+int * cflag_int(const char *name, const char* desc, int def);
+/// \brief Binds an integer flag to an external variable.
+void cflag_int_ref(const char *name, const char* desc, int *ref, int def);
+
+/// \brief Creates a new floating-point flag.
+/// \param name  the name of the flag
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the flag's value.
+float * cflag_float(const char *name, const char* desc, float def);
+/// \brief Binds a float flag to an external variable.
+void cflag_float_ref(const char *name, const char* desc, float *ref, float def);
+/// \brief Creates a new double flag.
+double * cflag_double(const char *name, const char* desc, double def);
+/// \brief Binds a double flag to an external variable.
+void cflag_double_ref(const char *name, const char* desc, double *ref, double def);
+/// \brief Creates a new long double flag.
+long double * cflag_long_double(const char *name, const char* desc, long double def);
+/// \brief Binds a long double flag to an external variable.
+void cflag_long_double_ref(const char *name, const char* desc, long double *ref, long double def);
+
+/// \brief Creates a new string flag.
+/// \param name  the name of the flag
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the string value.
 char ** cflag_string(const char *name, const char* desc, const char *def);
+/// \brief Binds a string flag to an external variable.
+void cflag_string_ref(const char *name, const char* desc, char **ref, const char *def);
 
 /// \brief Parses the flags given to the program and checks for matching flags.
-/// The first entry of the argv array is removed by default.
-/// \param argc  argument count
-/// \param argv  string array of arguments 
-/// \returns false on error.
+/// The first entry of the argv array (program name) is skipped.
+/// \param argc  The number of arguments in argv.
+/// \param argv  The array of argument strings.
+/// \returns true if parsing was successful, false if an error occurred.
 bool cflag_parse(int argc, char **argv);
 
-/// \brief Logs an error message to the specified stream. Note only call this function if flag_parse returned false.
-/// \param stream the stream to print to
+/// \brief Logs the current parsing error to the specified stream.
+/// Only call this function if cflag_parse() returned false.
+/// \param stream The output stream (e.g., stderr).
 void cflag_log_error(FILE *stream);
 
-/// \brief Returns the current error. Only use this function if you want to handle errors yourself.
-/// Alternative is cflag_log_error(stream)
-/// \return returns a cflag_error struct, which provides the type of error (One of the CFLAG_ERROR_ constants),
-/// the name of the flag that was processed when the error occured and optionally the value that was assigned to the flag
+/// \brief Returns a structure containing details about the last parsing error.
+/// \return A cflag_error struct containing the error type, flag name, and value.
 cflag_error cflag_get_error();
 
-/// \brief Logs all flags, with description and default values.
-/// \param stream the stream to print to
-/// \param printdefault wheter to print the default value
+/// \brief Prints the registered flags, their descriptions, and default values.
+/// \param stream The output stream (e.g., stdout).
+/// \param printdefault Whether to print the default values for each flag.
 void cflag_log_options(FILE *stream, bool printdefault);
+
 
 #endif // _CFLAG_H
 
@@ -222,13 +277,6 @@ struct cflag_flag {
 #   define CFLAG_MAX_FLAGS 128
 #endif // CFLAG_MAX_FLAGS
 
-#ifndef CFLAG_MAX
-#   define CFLAG_MAX(A, B)               ((A) > (B) ? (A) : (B))
-#endif // CFLAG_MAX
-#ifndef CFLAG_MIN
-#   define CFLAG_MIN(A, B)               ((A) < (B) ? (A) : (B))
-#endif //CFLAG_MIN
-
 static struct cflag_flag cflag__flags[CFLAG_MAX_FLAGS];
 static uint32_t cflag__count = 0;
 static cflag_error cflag__err = { .error = CFLAG_ERROR_NONE, .flag = NULL, .value = NULL };
@@ -238,9 +286,6 @@ static cflag_error cflag__err = { .error = CFLAG_ERROR_NONE, .flag = NULL, .valu
 
 static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, const char *desc);
 static char * cflag__shift_args(int *argc, char ***argv);
-static int cflag__str2int(int *out, char *s, int min, int max);
-static int cflag__str2uint64(uint64_t *out, char *s, uint64_t min, uint64_t max);
-static int cflag__str2float(float *out, char *s, float min, float max);
 static void cflag__set_error(enum cflag_errors err, char *flag, char *value);
 
 
