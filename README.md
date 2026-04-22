@@ -1,14 +1,14 @@
-# c-flags
+# cargs
 
-A simple, C99-compatible, single-header library for parsing command-line flags.
+A simple, C99-compatible, single-header library for parsing command-line flags and positional arguments.
 
 ## Installation
 
-Just include **[cflag.h](cflag.h)** in your project:
+Just include **[cargs.h](cargs.h)** in your project:
 
 ```c
-#define CFLAG_IMPLEMENTATION
-#include "cflag.h"
+#define CARGS_IMPLEMENTATION
+#include "cargs.h"
 ```
 
 ## Usage
@@ -20,54 +20,66 @@ The library supports both internal storage (managed by the library) and external
 #### Internal Storage
 The library allocates memory and returns a pointer to the value.
 ```c
-// bool *flag = cflag_bool(name, description, default_value);
-bool *verbose = cflag_bool("-v", "Enable verbose output", false);
-int *count    = cflag_int("-c", "Number of iterations", 10);
-char **file   = cflag_string("-f", "Input file path", "input.txt");
+// bool *flag = cargs_bool(name, description, default_value);
+bool *verbose = cargs_bool("-v", "Enable verbose output", false);
+int *count    = cargs_int("-c", "Number of iterations", 10);
+char **file   = cargs_string("-f", "Input file path", "input.txt");
 ```
 
 #### External Storage (Reference Binding)
 The library updates your existing variables directly.
 ```c
 int timeout = 30;
-cflag_int_ref("-t", "Connection timeout", &timeout, 30);
+cargs_int_ref("-t", "Connection timeout", &timeout, 30);
 
 bool debug = false;
-cflag_bool_ref("-d", "Enable debug mode", &debug, false);
+cargs_bool_ref("-d", "Enable debug mode", &debug, false);
 ```
 
-### 2. Supported Types
-The library supports a wide range of types:
-- **Booleans**: `cflag_bool`
-- **Integers**: `cflag_int` (platform dependent), `cflag_int8`, `cflag_int16`, `cflag_int32`, `cflag_int64` (and unsigned versions)
-- **Floating Point**: `cflag_float`, `cflag_double`, `cflag_long_double`
-- **Strings**: `cflag_string`
-- **Characters**: `cflag_char`
+### 2. Positional Arguments
 
-### 3. Parsing Flags
-
-Use `cflag_parse` to process `argc` and `argv`. It returns `false` if an unknown flag is encountered or a value is missing/invalid.
+You can define mandatory or optional positional arguments that are filled in the order they appear on the command line.
 
 ```c
-if (!cflag_parse(argc, argv)) {
+// char **arg = cargs_positional(name, description, is_mandatory);
+char **input = cargs_positional("input", "The input file", true);
+char **output = cargs_positional("output", "The output file", false);
+```
+
+### 3. Supported Types
+
+The library supports a wide range of types:
+- **Booleans**: `cargs_bool`
+- **Integers**: `cargs_int` (platform dependent), `cargs_int8`, `cargs_int16`, `cargs_int32`, `cargs_int64` (and unsigned versions)
+- **Floating Point**: `cargs_float`, `cargs_double`, `cargs_long_double`
+- **Strings**: `cargs_string`
+- **Characters**: `cargs_char`
+- **Positionals**: `cargs_positional`
+
+### 4. Parsing Arguments
+
+Use `cargs_parse` to process `argc` and `argv`. It returns `false` if an unknown flag is encountered, a value is missing/invalid, or a mandatory positional argument is missing.
+
+```c
+if (!cargs_parse(argc, argv)) {
     // Log the error to stderr
-    cflag_log_error(stderr);
+    cargs_log_error(stderr);
     
     // Or handle the error manually
-    cflag_error err = cflag_get_error();
-    if (err.error == CFLAG_ERROR_UNKNOWN) {
+    cargs_error err = cargs_get_error();
+    if (err.error == CARGS_ERROR_UNKNOWN) {
         printf("Unknown flag: %s\n", err.flag);
     }
 }
 ```
 
-### 4. Logging Options
+### 5. Logging Options
 
-You can automatically generate a help menu listing all registered flags.
+You can automatically generate a help menu listing all registered flags and positional arguments.
 
 ```c
 // stream, print_defaults
-cflag_log_options(stdout, true);
+cargs_log_options(stdout, true);
 ```
 
 ## Example
@@ -77,5 +89,5 @@ For a complete demonstration, see **[example.c](example.c)**.
 Compile and run:
 ```bash
 gcc example.c -o example
-./example -v -l 50 -t 0.75 -f logs.txt
+./example -v -l 50 -t 0.75 input.txt
 ```
