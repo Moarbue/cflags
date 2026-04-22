@@ -277,9 +277,9 @@ static char * cargs__shift_args(int *argc, char ***argv);
 static void cargs__set_error(enum cargs_errors err, const char *flag, char *value);
 static int cargs__find_next_positional();
 static int cargs__is_flag(const char *arg);
-static int cargs__str2int_generic(int64_t *out, char *s, int64_t min, int64_t max);
-static int cargs__str2uint_generic(uint64_t *out, char *s, uint64_t min, uint64_t max);
-static int cargs__str2float_generic(long double *out, char *s, long double min, long double max);
+static enum cargs_errors cargs__str2int_generic(int64_t *out, char *s, int64_t min, int64_t max);
+static enum cargs_errors cargs__str2uint_generic(uint64_t *out, char *s, uint64_t min, uint64_t max);
+static enum cargs_errors cargs__str2float_generic(long double *out, char *s, long double min, long double max);
 
 #define CARGS_REF_IMPL(type_enum, type_name, type_t, field_name) \
 void cargs_##type_name##_ref(const char *name, const char *desc, type_t *ref, type_t def) \
@@ -573,7 +573,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         int64_t val;
-                        int res = cargs__str2int_generic(&val, arg, INT8_MIN, INT8_MAX);
+                        enum cargs_errors res = cargs__str2int_generic(&val, arg, INT8_MIN, INT8_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -589,7 +589,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         int64_t val;
-                        int res = cargs__str2int_generic(&val, arg, INT16_MIN, INT16_MAX);
+                        enum cargs_errors res = cargs__str2int_generic(&val, arg, INT16_MIN, INT16_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -605,7 +605,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         int64_t val;
-                        int res = cargs__str2int_generic(&val, arg, INT32_MIN, INT32_MAX);
+                        enum cargs_errors res = cargs__str2int_generic(&val, arg, INT32_MIN, INT32_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -621,7 +621,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         int64_t val;
-                        int res = cargs__str2int_generic(&val, arg, INT64_MIN, INT64_MAX);
+                        enum cargs_errors res = cargs__str2int_generic(&val, arg, INT64_MIN, INT64_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -637,7 +637,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         uint64_t val;
-                        int res = cargs__str2uint_generic(&val, arg, 0, UINT8_MAX);
+                        enum cargs_errors res = cargs__str2uint_generic(&val, arg, 0, UINT8_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -653,7 +653,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         uint64_t val;
-                        int res = cargs__str2uint_generic(&val, arg, 0, UINT16_MAX);
+                        enum cargs_errors res = cargs__str2uint_generic(&val, arg, 0, UINT16_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -669,7 +669,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         uint64_t val;
-                        int res = cargs__str2uint_generic(&val, arg, 0, UINT32_MAX);
+                        enum cargs_errors res = cargs__str2uint_generic(&val, arg, 0, UINT32_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -685,7 +685,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         uint64_t val;
-                        int res = cargs__str2uint_generic(&val, arg, 0, UINT64_MAX);
+                        enum cargs_errors res = cargs__str2uint_generic(&val, arg, 0, UINT64_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -701,7 +701,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         uint64_t val;
-                        int res = cargs__str2uint_generic(&val, arg, 0, SIZE_MAX);
+                        enum cargs_errors res = cargs__str2uint_generic(&val, arg, 0, SIZE_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -717,7 +717,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         long double val;
-                        int res = cargs__str2float_generic(&val, arg, -FLT_MAX, FLT_MAX);
+                        enum cargs_errors res = cargs__str2float_generic(&val, arg, -FLT_MAX, FLT_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -733,7 +733,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         long double val;
-                        int res = cargs__str2float_generic(&val, arg, -DBL_MAX, DBL_MAX);
+                        enum cargs_errors res = cargs__str2float_generic(&val, arg, -DBL_MAX, DBL_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -749,7 +749,7 @@ bool cargs_parse(int argc, char **argv)
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
                         long double val;
-                        int res = cargs__str2float_generic(&val, arg, -LDBL_MAX, LDBL_MAX);
+                        enum cargs_errors res = cargs__str2float_generic(&val, arg, -LDBL_MAX, LDBL_MAX);
                         if (res != CARGS_ERROR_NONE) {
                             cargs__set_error(res, flag_name, arg);
                             return false;
@@ -981,7 +981,7 @@ static char * cargs__shift_args(int *argc, char ***argv)
 }
 
 // converts a string to a signed integer of specified width and checks if it's within range
-static int cargs__str2int_generic(int64_t *out, char *s, int64_t min, int64_t max) {
+static enum cargs_errors cargs__str2int_generic(int64_t *out, char *s, int64_t min, int64_t max) {
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
         return CARGS_ERROR_INVALID_NUMBER;
@@ -1000,7 +1000,7 @@ static int cargs__str2int_generic(int64_t *out, char *s, int64_t min, int64_t ma
 }
 
 // converts a string to an unsigned integer of specified width and checks if it's within range
-static int cargs__str2uint_generic(uint64_t *out, char *s, uint64_t min, uint64_t max) {
+static enum cargs_errors cargs__str2uint_generic(uint64_t *out, char *s, uint64_t min, uint64_t max) {
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
         return CARGS_ERROR_INVALID_NUMBER;
@@ -1017,7 +1017,7 @@ static int cargs__str2uint_generic(uint64_t *out, char *s, uint64_t min, uint64_
 }
 
 // converts a string to a float and checks if it's within range
-static int cargs__str2float_generic(long double *out, char *s, long double min, long double max) {
+static enum cargs_errors cargs__str2float_generic(long double *out, char *s, long double min, long double max) {
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
         return CARGS_ERROR_INVALID_NUMBER;
