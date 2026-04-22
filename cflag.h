@@ -6,6 +6,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#ifndef static_assert
+#define static_assert(cond, msg) typedef char static_assertion_##__LINE__[(cond) ? 1 : -1]
+#endif
+
+
 
 enum cflag_errors {
     CFLAG_ERROR_NONE,
@@ -184,9 +189,8 @@ enum cflag_type {
 
     CFLAG_TYPE_COUNT,
 };
-#if defined(static_assert)
 static_assert(CFLAG_TYPE_COUNT == 14, "Exhaustive cflag_type definition!");
-#endif
+
 
 union cflag_value {
     bool     boolean;
