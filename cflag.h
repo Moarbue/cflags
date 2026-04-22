@@ -6,8 +6,12 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#ifndef static_assert
-#define static_assert(cond, msg) typedef char static_assertion_##__LINE__[(cond) ? 1 : -1]
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#define CFLAG_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
+#elif defined(__cplusplus) && __cplusplus >= 201103L
+#define CFLAG_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+#else
+#define CFLAG_STATIC_ASSERT(cond, msg) typedef char static_assertion_##__LINE__[(cond) ? 1 : -1]
 #endif
 
 
@@ -24,9 +28,7 @@ enum cflag_errors {
 
     CFLAG_ERROR_COUNT,
 };
-#if defined(static_assert)
-static_assert(CFLAG_ERROR_COUNT == 7, "Exhaustive cflag_error definition!");
-#endif
+CFLAG_STATIC_ASSERT(CFLAG_ERROR_COUNT == 7, "Exhaustive cflag_error definition!");
 
 /// \brief Contains detailed information about a parsing error.
 typedef struct {
@@ -119,6 +121,15 @@ int * cflag_int(const char *name, const char* desc, int def);
 /// \brief Binds an integer flag to an external variable.
 void cflag_int_ref(const char *name, const char* desc, int *ref, int def);
 
+/// \brief Creates a new size_t flag.
+/// \param name  the name of the flag
+/// \param desc  a short description of the flag
+/// \param def   the default value of the flag
+/// \returns a pointer to the flag's value.
+size_t * cflag_size_t(const char *name, const char *desc, size_t def);
+/// \brief Binds a size_t flag to an external variable.
+void cflag_size_t_ref(const char *name, const char *desc, size_t *ref, size_t def);
+
 /// \brief Creates a new floating-point flag.
 /// \param name  the name of the flag
 /// \param desc  a short description of the flag
@@ -197,10 +208,11 @@ enum cflag_type {
     CFLAG_DOUBLE,
     CFLAG_LONG_DOUBLE,
     CFLAG_STRING,
+    CFLAG_SIZE_T,
 
     CFLAG_TYPE_COUNT,
 };
-static_assert(CFLAG_TYPE_COUNT == 14, "Exhaustive cflag_type definition!");
+CFLAG_STATIC_ASSERT(CFLAG_TYPE_COUNT == 15, "Exhaustive cflag_type definition!");
 
 union cflag_value {
     bool     boolean;
@@ -217,6 +229,7 @@ union cflag_value {
     double   double_val;
     long double long_double;
     char *   string;
+    size_t   size;
 };
 
 struct cflag_flag {
@@ -276,14 +289,28 @@ void cflag_long_double_ref(const char *name, const char *desc, long double *ref,
 
 void cflag_int_ref(const char *name, const char* desc, int *ref, int def)
 {
-    if (sizeof(int) == 8)
-        cflag_int64_ref(name, desc, (int64_t *)ref, (int64_t)def);
-    else if (sizeof(int) == 4)
-        cflag_int32_ref(name, desc, (int32_t *)ref, (int32_t)def);
-    else if (sizeof(int) == 2)
-        cflag_int16_ref(name, desc, (int16_t *)ref, (int16_t)def);
-    else
-        cflag_int8_ref(name, desc, (int8_t *)ref, (int8_t)def);
+#if INTPTR_MAX == INT64_MAX
+    cflag_int64_ref(name, desc, (int64_t *)ref, (int64_t)def);
+#elif INTPTR_MAX == INT32_MAX
+    cflag_int32_ref(name, desc, (int32_t *)ref, (int32_t)def);
+#elif INTPTR_MAX == INT16_MAX
+    cflag_int16_ref(name, desc, (int16_t *)ref, (int16_t)def);
+#elif INTPTR_MAX == INT8_MAX
+    cflag_int8_ref(name, desc, (int8_t *)ref, (int8_t)def);
+#else
+    #error "int size does not match 8/16/32/64 bits"
+#endif
+}
+
+void cflag_size_t_ref(const char *name, const char *desc, size_t *ref, size_t def)
+{
+#if SIZE_MAX == UINT64_MAX
+    cflag_uint64_ref(name, desc, (uint64_t *)ref, (uint64_t)def);
+#elif SIZE_MAX == UINT32_MAX
+    cflag_uint32_ref(name, desc, (uint32_t *)ref, (uint32_t)def);
+#else
+    #error "size_t size is neither 32 nor 64 bits"
+#endif
 }
 
 void cflag_string_ref(const char *name, const char* desc, char **ref, const char *def)
@@ -405,14 +432,28 @@ uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
 
 int * cflag_int(const char *name, const char* desc, int def)
 {
-    if (sizeof(int) == 8)
-        return (int *)cflag_int64(name, desc, (int64_t)def);
-    else if (sizeof(int) == 4)
-        return (int *)cflag_int32(name, desc, (int32_t)def);
-    else if (sizeof(int) == 2)
-        return (int *)cflag_int16(name, desc, (int16_t)def);
-    else
-        return (int *)cflag_int8(name, desc, (int8_t)def);
+#if INTPTR_MAX == INT64_MAX
+    return (int *)cflag_int64(name, desc, (int64_t)def);
+#elif INTPTR_MAX == INT32_MAX
+    return (int *)cflag_int32(name, desc, (int32_t)def);
+#elif INTPTR_MAX == INT16_MAX
+    return (int *)cflag_int16(name, desc, (int16_t)def);
+#elif INTPTR_MAX == INT8_MAX
+    return (int *)cflag_int8(name, desc, (int8_t)def);
+#else
+    #error "int size does not match 8/16/32/64 bits"
+#endif
+}
+
+size_t * cflag_size_t(const char *name, const char *desc, size_t def)
+{
+#if SIZE_MAX == UINT64_MAX
+    return (size_t *)cflag_uint64(name, desc, (uint64_t)def);
+#elif SIZE_MAX == UINT32_MAX
+    return (size_t *)cflag_uint32(name, desc, (uint32_t)def);
+#else
+    #error "size_t size is neither 32 nor 64 bits"
+#endif
 }
 
 float * cflag_float(const char *name, const char* desc, float def)
@@ -513,7 +554,8 @@ bool cflag_parse(int argc, char **argv)
                     case CFLAG_UINT8:
                     case CFLAG_UINT16:
                     case CFLAG_UINT32:
-                    case CFLAG_UINT64: {
+                    case CFLAG_UINT64:
+                    case CFLAG_SIZE_T: {
                         if (argc == 0) {
                             cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
@@ -528,6 +570,7 @@ bool cflag_parse(int argc, char **argv)
                         if (cflag__flags[i].type == CFLAG_UINT8) *(uint8_t *)(cflag__flags[i].value_ptr) = (uint8_t)val;
                         else if (cflag__flags[i].type == CFLAG_UINT16) *(uint16_t *)(cflag__flags[i].value_ptr) = (uint16_t)val;
                         else if (cflag__flags[i].type == CFLAG_UINT32) *(uint32_t *)(cflag__flags[i].value_ptr) = (uint32_t)val;
+                        else if (cflag__flags[i].type == CFLAG_SIZE_T) *(size_t *)(cflag__flags[i].value_ptr) = (size_t)val;
                         else *(uint64_t *)(cflag__flags[i].value_ptr) = val;
                     }
                     break;
@@ -597,21 +640,21 @@ void cflag_log_error(FILE *stream)
         break;
 
         case CFLAG_ERROR_NO_VALUE:
-            fprintf(stream, "ERROR: NO VALUE prodived for %s \"%s\"\n", cflag__type, cflag__err.flag);
+            fprintf(stream, "ERROR: NO VALUE provided for %s \"%s\"\n", cflag__type, cflag__err.flag);
         break;
-        
+
         case CFLAG_ERROR_INVALID_NUMBER:
             fprintf(stream, "ERROR: INVALID VALUE for %s \"%s\". Provided value was \"%s\"\n", cflag__type, cflag__err.flag, cflag__err.value);
         break;
-        
+
         case CFLAG_ERROR_OVERFLOW:
             fprintf(stream, "ERROR: OVERFLOW while parsing %s \"%s\". Provided value was \"%s\"\n", cflag__type, cflag__err.flag, cflag__err.value);
         break;
-        
+
         case CFLAG_ERROR_UNDERFLOW:
             fprintf(stream, "ERROR: UNDERFLOW while parsing %s \"%s\". Provided value was \"%s\"\n", cflag__type, cflag__err.flag, cflag__err.value);
         break;
-        
+
         case CFLAG_ERROR_OUT_OF_BOUNDS:
             fprintf(stream, "ERROR: Value OUT OF BOUNDS for %s \"%s\". Provided value was \"%s\"\n", cflag__type, cflag__err.flag, cflag__err.value);
         break;
@@ -704,6 +747,11 @@ void cflag_log_options(FILE *stream, bool printdefault)
 			case CFLAG_STRING:
                 if (printdefault)
 				    fprintf(stream, "          Default: %s\n", cflag__flags[i].def.string);
+			break;
+
+			case CFLAG_SIZE_T:
+                if (printdefault)
+				    fprintf(stream, "          Default: %zu\n", cflag__flags[i].def.size);
 			break;
 
 			case CFLAG_TYPE_COUNT:
