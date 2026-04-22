@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 
 enum cflag_errors {
@@ -127,6 +128,7 @@ struct cflag_flag {
     char *desc;      // short description
     union cflag_value def; // default value
     union cflag_value val; // current value
+    void *value_ptr; // pointer to current value (either internal or external)
 };
 
 #ifndef CFLAG_MAX_FLAGS
@@ -162,7 +164,7 @@ bool * cflag_bool(const char *name, const char *desc, bool def)
     flag->def.boolean = def;
     flag->val.boolean = def;
 
-    return &flag->val.boolean;
+    return (bool *)flag->value_ptr;
 }
 
 int * cflag_int(const char *name, const char* desc, int def)
@@ -172,7 +174,7 @@ int * cflag_int(const char *name, const char* desc, int def)
     flag->def.integer = def;
     flag->val.integer = def;
 
-    return &flag->val.integer;
+    return (int *)flag->value_ptr;
 }
 
 uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
@@ -182,7 +184,7 @@ uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
     flag->def.uint64 = def;
     flag->val.uint64 = def;
 
-    return &flag->val.uint64;
+    return (uint64_t *)flag->value_ptr;
 }
 
 float * cflag_float(const char *name, const char* desc, float def)
@@ -192,7 +194,7 @@ float * cflag_float(const char *name, const char* desc, float def)
     flag->def.floating = def;
     flag->val.floating = def;
 
-    return &flag->val.floating;
+    return (float *)flag->value_ptr;
 }
 
 char ** cflag_string(const char *name, const char* desc, const char *def)
@@ -202,7 +204,7 @@ char ** cflag_string(const char *name, const char* desc, const char *def)
     flag->def.string = (char*) def;
     flag->val.string = (char*) def;
 
-    return &flag->val.string;
+    return (char **)flag->value_ptr;
 }
 
 bool cflag_parse(int argc, char **argv)
@@ -219,10 +221,10 @@ bool cflag_parse(int argc, char **argv)
             if (strcmp(cflag__flags[i].name, flag_name) == 0) {
                 // check type of flag and parse accordingly
                 switch (cflag__flags[i].type) {
-                    case CFLAG_BOOL: {
-                        cflag__flags[i].val.boolean = true;
-                    }
-                    break;
+                     case CFLAG_BOOL: {
+                         *(bool *)(cflag__flags[i].value_ptr) = true;
+                     }
+                     break;
 
                     case CFLAG_INT: {
                         // check if a value was provided
@@ -241,9 +243,9 @@ bool cflag_parse(int argc, char **argv)
                             return false;
                         }
 
-                        cflag__flags[i].val.integer = val;
-                    }
-                    break;
+                        *(int *)(cflag__flags[i].value_ptr) = val;
+                     }
+                     break;
 
                     case CFLAG_UINT64: {
                         // check if a value was provided
@@ -262,9 +264,9 @@ bool cflag_parse(int argc, char **argv)
                             return false;
                         }
 
-                        cflag__flags[i].val.uint64 = val;
-                    }
-                    break;
+                        *(uint64_t *)(cflag__flags[i].value_ptr) = val;
+                     }
+                     break;
 
                     case CFLAG_FLOAT: {
                         // check if value was provided
@@ -283,9 +285,9 @@ bool cflag_parse(int argc, char **argv)
                             return false;
                         }
 
-                        cflag__flags[i].val.floating = val;
-                    }
-                    break;
+                        *(float *)(cflag__flags[i].value_ptr) = val;
+                     }
+                     break;
 
                     case CFLAG_STRING: {
                         // check if value was provided
@@ -296,9 +298,9 @@ bool cflag_parse(int argc, char **argv)
                         // provided value as string
                         char *arg = cflag__shift_args(&argc, &argv);
 
-                        cflag__flags[i].val.string = arg;
-                    }
-                    break;
+                        *(char **)(cflag__flags[i].value_ptr) = arg;
+                     }
+                     break;
 
                     case CFLAG_TYPE_COUNT:
                     default: {
@@ -421,6 +423,7 @@ static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, con
     flag->type  = type;
     flag->name = (char*) name;
     flag->desc = (char*) desc;
+    flag->value_ptr = &flag->val;
 
     return flag;
 }
