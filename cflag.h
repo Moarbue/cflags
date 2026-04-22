@@ -30,32 +30,38 @@ typedef struct {
 
 
 /// \brief Creates a new boolean flag.
-/// \param name  the name of the flag
-/// \param desc  a short description of the flag
-/// \param def   the default value of the flag
-/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 bool * cflag_bool(const char *name, const char *desc, bool def);
 
-/// \brief Creates a new integer flag.
-/// \param name  the name of the flag
-/// \param desc  a short description of the flag
-/// \param def   the default value of the flag
-/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
-int * cflag_int(const char *name, const char* desc, int def);
+/// \brief Creates a new char flag.
+char * cflag_char(const char *name, const char *desc, char def);
 
-/// \brief Creates a new uint64 flag.
-/// \param name  the name of the flag
-/// \param desc  a short description of the flag
-/// \param def   the default value of the flag
-/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
+/// \brief Creates a new int8 flag.
+int8_t * cflag_int8(const char *name, const char *desc, int8_t def);
+uint8_t * cflag_uint8(const char *name, const char *desc, uint8_t def);
+
+/// \brief Creates a new int16 flag.
+int16_t * cflag_int16(const char *name, const char *desc, int16_t def);
+uint16_t * cflag_uint16(const char *name, const char *desc, uint16_t def);
+
+/// \brief Creates a new int32 flag.
+int32_t * cflag_int32(const char *name, const char *desc, int32_t def);
+uint32_t * cflag_uint32(const char *name, const char *desc, uint32_t def);
+
+/// \brief Creates a new int64 flag.
+int64_t * cflag_int64(const char *name, const char *desc, int64_t def);
 uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def);
 
+/// \brief Creates a new integer flag.
+int * cflag_int(const char *name, const char* desc, int def);
+
 /// \brief Creates a new floating-point-number flag.
-/// \param name  the name of the flag
-/// \param desc  a short description of the flag
-/// \param def   the default value of the flag
-/// \returns a pointer to the value of the flag; be sure to call cflag_parse()
 float * cflag_float(const char *name, const char* desc, float def);
+double * cflag_double(const char *name, const char* desc, double def);
+long double * cflag_long_double(const char *name, const char* desc, long double def);
+
+/// \brief Creates a new string flag.
+char ** cflag_string(const char *name, const char* desc, const char *def);
+
 
 /// \brief Creates a new floating-point-number flag.
 /// \param name  the name of the flag
@@ -103,22 +109,40 @@ void cflag_log_options(FILE *stream, bool printdefault);
 
 enum cflag_type {
     CFLAG_BOOL,
-    CFLAG_INT,
+    CFLAG_CHAR,
+    CFLAG_INT8,
+    CFLAG_UINT8,
+    CFLAG_INT16,
+    CFLAG_UINT16,
+    CFLAG_INT32,
+    CFLAG_UINT32,
+    CFLAG_INT64,
     CFLAG_UINT64,
     CFLAG_FLOAT,
+    CFLAG_DOUBLE,
+    CFLAG_LONG_DOUBLE,
     CFLAG_STRING,
 
     CFLAG_TYPE_COUNT,
 };
 #if defined(static_assert)
-static_assert(CFLAG_TYPE_COUNT == 5, "Exhaustive cflag_type definition!");
+static_assert(CFLAG_TYPE_COUNT == 14, "Exhaustive cflag_type definition!");
 #endif
 
 union cflag_value {
     bool     boolean;
-    int      integer;
+    char     character;
+    int8_t   int8;
+    uint8_t  uint8;
+    int16_t  int16;
+    uint16_t uint16;
+    int32_t  int32;
+    uint32_t uint32;
+    int64_t  int64;
     uint64_t uint64;
     float    floating;
+    double   double_val;
+    long double long_double;
     char *   string;
 };
 
@@ -167,14 +191,84 @@ bool * cflag_bool(const char *name, const char *desc, bool def)
     return (bool *)flag->value_ptr;
 }
 
-int * cflag_int(const char *name, const char* desc, int def)
+char * cflag_char(const char *name, const char *desc, char def)
 {
-    struct cflag_flag *flag = cflag__new(CFLAG_INT, name, desc);
+    struct cflag_flag *flag = cflag__new(CFLAG_CHAR, name, desc);
 
-    flag->def.integer = def;
-    flag->val.integer = def;
+    flag->def.character = def;
+    flag->val.character = def;
 
-    return (int *)flag->value_ptr;
+    return (char *)flag->value_ptr;
+}
+
+int8_t * cflag_int8(const char *name, const char *desc, int8_t def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_INT8, name, desc);
+
+    flag->def.int8 = def;
+    flag->val.int8 = def;
+
+    return (int8_t *)flag->value_ptr;
+}
+
+uint8_t * cflag_uint8(const char *name, const char *desc, uint8_t def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_UINT8, name, desc);
+
+    flag->def.uint8 = def;
+    flag->val.uint8 = def;
+
+    return (uint8_t *)flag->value_ptr;
+}
+
+int16_t * cflag_int16(const char *name, const char *desc, int16_t def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_INT16, name, desc);
+
+    flag->def.int16 = def;
+    flag->val.int16 = def;
+
+    return (int16_t *)flag->value_ptr;
+}
+
+uint16_t * cflag_uint16(const char *name, const char *desc, uint16_t def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_UINT16, name, desc);
+
+    flag->def.uint16 = def;
+    flag->val.uint16 = def;
+
+    return (uint16_t *)flag->value_ptr;
+}
+
+int32_t * cflag_int32(const char *name, const char *desc, int32_t def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_INT32, name, desc);
+
+    flag->def.int32 = def;
+    flag->val.int32 = def;
+
+    return (int32_t *)flag->value_ptr;
+}
+
+uint32_t * cflag_uint32(const char *name, const char *desc, uint32_t def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_UINT32, name, desc);
+
+    flag->def.uint32 = def;
+    flag->val.uint32 = def;
+
+    return (uint32_t *)flag->value_ptr;
+}
+
+int64_t * cflag_int64(const char *name, const char *desc, int64_t def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_INT64, name, desc);
+
+    flag->def.int64 = def;
+    flag->val.int64 = def;
+
+    return (int64_t *)flag->value_ptr;
 }
 
 uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
@@ -187,6 +281,19 @@ uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
     return (uint64_t *)flag->value_ptr;
 }
 
+int * cflag_int(const char *name, const char* desc, int def)
+{
+#if sizeof(int) == 8
+    return (int *)cflag_int64(name, desc, (int64_t)def);
+#elif sizeof(int) == 4
+    return (int *)cflag_int32(name, desc, (int32_t)def);
+#elif sizeof(int) == 2
+    return (int *)cflag_int16(name, desc, (int16_t)def);
+#else
+    return (int *)cflag_int8(name, desc, (int8_t)def);
+#endif
+}
+
 float * cflag_float(const char *name, const char* desc, float def)
 {
     struct cflag_flag *flag = cflag__new(CFLAG_FLOAT, name, desc);
@@ -195,6 +302,26 @@ float * cflag_float(const char *name, const char* desc, float def)
     flag->val.floating = def;
 
     return (float *)flag->value_ptr;
+}
+
+double * cflag_double(const char *name, const char* desc, double def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_DOUBLE, name, desc);
+
+    flag->def.double_val = def;
+    flag->val.double_val = def;
+
+    return (double *)flag->value_ptr;
+}
+
+long double * cflag_long_double(const char *name, const char* desc, long double def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_LONG_DOUBLE, name, desc);
+
+    flag->def.long_double = def;
+    flag->val.long_double = def;
+
+    return (long double *)flag->value_ptr;
 }
 
 char ** cflag_string(const char *name, const char* desc, const char *def)
