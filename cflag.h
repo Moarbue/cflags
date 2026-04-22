@@ -182,6 +182,65 @@ void cflag_log_options(FILE *stream, bool printdefault);
 #include <stdlib.h>
 #include <string.h>
 
+enum cflag_type {
+    CFLAG_BOOL,
+    CFLAG_CHAR,
+    CFLAG_INT8,
+    CFLAG_UINT8,
+    CFLAG_INT16,
+    CFLAG_UINT16,
+    CFLAG_INT32,
+    CFLAG_UINT32,
+    CFLAG_INT64,
+    CFLAG_UINT64,
+    CFLAG_FLOAT,
+    CFLAG_DOUBLE,
+    CFLAG_LONG_DOUBLE,
+    CFLAG_STRING,
+
+    CFLAG_TYPE_COUNT,
+};
+static_assert(CFLAG_TYPE_COUNT == 14, "Exhaustive cflag_type definition!");
+
+union cflag_value {
+    bool     boolean;
+    char     character;
+    int8_t   int8;
+    uint8_t  uint8;
+    int16_t  int16;
+    uint16_t uint16;
+    int32_t  int32;
+    uint32_t uint32;
+    int64_t  int64;
+    uint64_t uint64;
+    float    floating;
+    double   double_val;
+    long double long_double;
+    char *   string;
+};
+
+struct cflag_flag {
+    enum cflag_type type; //value of the enum cflag_type
+    char *name;      // name
+    char *desc;      // short description
+    union cflag_value def; // default value
+    union cflag_value val; // current value
+    void *value_ptr; // pointer to current value (either internal or external)
+};
+
+#ifndef CFLAG_MAX_FLAGS
+#   define CFLAG_MAX_FLAGS 128
+#endif // CFLAG_MAX_FLAGS
+
+static struct cflag_flag cflag__flags[CFLAG_MAX_FLAGS];
+static uint32_t cflag__count = 0;
+static cflag_error cflag__err = { .error = CFLAG_ERROR_NONE, .flag = NULL, .value = NULL };
+
+// Forward declarations
+static struct cflag_flag *cflag__new(enum cflag_type type, const char *name, const char *desc);
+static char * cflag__shift_args(int *argc, char ***argv);
+static void cflag__set_error(enum cflag_errors err, char *flag, char *value);
+
 #define CFLAG_REF_IMPL(type_enum, type_t, field_name) \
 void cflag_##type_t##_ref(const char *name, const char *desc, type_t *ref, type_t def) \
 { \
@@ -226,60 +285,6 @@ void cflag_string_ref(const char *name, const char* desc, char **ref, const char
     flag->value_ptr = ref;
 }
 
-enum cflag_type {
-    CFLAG_BOOL,
-    CFLAG_CHAR,
-    CFLAG_INT8,
-    CFLAG_UINT8,
-    CFLAG_INT16,
-    CFLAG_UINT16,
-    CFLAG_INT32,
-    CFLAG_UINT32,
-    CFLAG_INT64,
-    CFLAG_UINT64,
-    CFLAG_FLOAT,
-    CFLAG_DOUBLE,
-    CFLAG_LONG_DOUBLE,
-    CFLAG_STRING,
-
-    CFLAG_TYPE_COUNT,
-};
-static_assert(CFLAG_TYPE_COUNT == 14, "Exhaustive cflag_type definition!");
-
-
-union cflag_value {
-    bool     boolean;
-    char     character;
-    int8_t   int8;
-    uint8_t  uint8;
-    int16_t  int16;
-    uint16_t uint16;
-    int32_t  int32;
-    uint32_t uint32;
-    int64_t  int64;
-    uint64_t uint64;
-    float    floating;
-    double   double_val;
-    long double long_double;
-    char *   string;
-};
-
-struct cflag_flag {
-    enum cflag_type type; //value of the enum cflag_type
-    char *name;      // name
-    char *desc;      // short description
-    union cflag_value def; // default value
-    union cflag_value val; // current value
-    void *value_ptr; // pointer to current value (either internal or external)
-};
-
-#ifndef CFLAG_MAX_FLAGS
-#   define CFLAG_MAX_FLAGS 128
-#endif // CFLAG_MAX_FLAGS
-
-static struct cflag_flag cflag__flags[CFLAG_MAX_FLAGS];
-static uint32_t cflag__count = 0;
-static cflag_error cflag__err = { .error = CFLAG_ERROR_NONE, .flag = NULL, .value = NULL };
 
 
 // forward declaration of helper functions
