@@ -5,56 +5,50 @@
 
 int main(int argc, char **argv)
 {
-    // define some flags
+    // 1. Reference-based binding: variables are declared here, and the library updates them directly.
+    bool verbose = false;
+    cflag_bool_ref("-v", "Enable verbose output", &verbose, false);
 
-    //                              name   description                                                default 
-    bool *help       = cflag_bool  ("-h",  "Prints this help menu",                                   false);
-    int *iter        = cflag_int   ("-i",  "Print all integers up to i",                              0);
-    uint64_t *number = cflag_uint64("-n",  "A uint64_t number which is printed before exiting",       0);
-    float *number2   = cflag_float ("-n2", "A floating point number which is printed before exiting", 0.f);
-    char **printme   = cflag_string("-s",  "A string which is printed to stdout stream",              NULL);
+    int max_lines = 100;
+    cflag_int_ref("-l", "Maximum number of lines to analyze", &max_lines, 100);
 
-    // set minimum and maximum values of flags
-    cflag_int_minmax(iter, 1, 100);
-    cflag_uint64_minmax(number, 0, 1000000);
-    cflag_float_minmax(number2, -1.f, 40.f);
+    float threshold = 0.5f;
+    cflag_float_ref("-t", "Error threshold for alerts", &threshold, 0.5f);
 
-    // parse all flags and check for errors
+    // 2. Pointer-based binding: memory is managed by the library.
+    char **input_file = cflag_string("-f", "Path to the log file to analyze", "access.log");
+    char **log_level = cflag_string("-L", "Filter by log level (INFO, WARN, ERROR)", "INFO");
+
+    // Parse flags and check for errors.
     if (!cflag_parse(argc, argv)) {
-        cflag_log_error(stdout);
-        printf("Usage: %s [OPTIONS]\n", *argv);
-		printf("Options:\n");
-        cflag_log_options(stdout, true, true);
+        cflag_log_error(stderr);
+        printf("\nUsage: %s [OPTIONS]\n", argv[0]);
+        printf("Options:\n");
+        cflag_log_options(stdout, true);
         return 1;
     }
 
-    // the pointers now store the values that were passed to the program
-
-    // e.g. print a help screen if the -h flag was passed
-    // flags with name, description and optionally default values are formated
-    // and printed automatically in the cflag_log_options() function
-    if (*help) {
-        printf("Usage: %s [OPTIONS]\n", *argv);
-		printf("Options:\n");
-        cflag_log_options(stdout, true, true);
-        return 0;
+    // Print help if verbose is requested or as a separate flag (though here we use -v for demo)
+    if (verbose) {
+        printf("[INFO] Starting log analysis...\n");
+        printf("[INFO] File: %s\n", *input_file);
+        printf("[INFO] Level: %s\n", *log_level);
+        printf("[INFO] Max Lines: %d\n", max_lines);
+        printf("[INFO] Threshold: %.2f\n", threshold);
     }
 
-    // process other values...
+    printf("Analyzing %s for level %s (Max: %d, Threshold: %.2f)...\n", 
+           *input_file, *log_level, max_lines, threshold);
 
-    if (*iter > 0) {
-        for (int i = 0; i < *iter + 1; ++i) {
-            printf("%d\n", i);
-        }
-    } else if (*iter < 0) {
-        for (int i = 0; i > *iter - 1; --i) {
-            printf("%d\n", i);
+    // Mock analysis logic
+    for (int i = 1; i <= max_lines; ++i) {
+        if (verbose) printf("Processing line %d...\n", i);
+        if (i == 42) {
+            printf("  >> Alert: High error rate detected at line %d (above threshold %.2f)!\n", i, threshold);
         }
     }
 
-    if (*number != 0)     printf("n  = %lu\n", *number);
-    if (*number2 != 0.f)  printf("n2 = %.*f\n", 38, *number2);
-    if (*printme != NULL) printf("s  = %s\n", *printme);
+    printf("Analysis complete.\n");
 
     return 0;
 }

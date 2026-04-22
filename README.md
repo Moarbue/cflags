@@ -1,78 +1,81 @@
 # c-flags
 
-A simple one-header-file library for parsing command-line flags. \
-This library is heavily inspired by **[tsodings](https://github.com/tsoding/)** version: https://github.com/tsoding/flag.h \
-which is inspired by golang's **[flag module](https://pkg.go.dev/flag)**.
+A simple, C99-compatible, single-header library for parsing command-line flags.
 
 ## Installation
 
-Just include **[flags.h](https://github.com/Moarbue/c-flags/blob/main/flags.h)** in your project and you're good to go.
+Just include **[cflag.h](cflag.h)** in your project:
+
+```c
+#define CFLAG_IMPLEMENTATION
+#include "cflag.h"
+```
 
 ## Usage
 
-Creating a new flag:
-```C
+The library supports both internal storage (managed by the library) and external storage (binding to your own variables).
 
-// name: name of the flag
-// desc: short description of the flag
-// def: default value of the flag
-bool *flag = cflag_bool(const char *name, const char *desc, const bool def);
+### 1. Creating Flags
 
-char **flag2 = cflag_string(const char *name, const char *desc, const char *def);
-
-...
-
-```
-Setting bounds for the flags:
-```C
-
-cflag_int_minmax   (int      *flag, int      min, int      max);
-cflag_uint64_minmax(uint64_t *flag, uint64_t min, uint64_t max);
-cflag_float_minmax (float    *flag, float    min, float    max);
-
+#### Internal Storage
+The library allocates memory and returns a pointer to the value.
+```c
+// bool *flag = cflag_bool(name, description, default_value);
+bool *verbose = cflag_bool("-v", "Enable verbose output", false);
+int *count    = cflag_int("-c", "Number of iterations", 10);
+char **file   = cflag_string("-f", "Input file path", "input.txt");
 ```
 
-Parse the flags:
-```C
+#### External Storage (Reference Binding)
+The library updates your existing variables directly.
+```c
+int timeout = 30;
+cflag_int_ref("-t", "Connection timeout", &timeout, 30);
 
-// Checks if incomming flags match any of the created flags. Returns false on error
+bool debug = false;
+cflag_bool_ref("-d", "Enable debug mode", &debug, false);
+```
+
+### 2. Supported Types
+The library supports a wide range of types:
+- **Booleans**: `cflag_bool`
+- **Integers**: `cflag_int` (platform dependent), `cflag_int8`, `cflag_int16`, `cflag_int32`, `cflag_int64` (and unsigned versions)
+- **Floating Point**: `cflag_float`, `cflag_double`, `cflag_long_double`
+- **Strings**: `cflag_string`
+- **Characters**: `cflag_char`
+
+### 3. Parsing Flags
+
+Use `cflag_parse` to process `argc` and `argv`. It returns `false` if an unknown flag is encountered or a value is missing/invalid.
+
+```c
 if (!cflag_parse(argc, argv)) {
-    // Logs a useful error message to the standard out stream
-    cflag_log_error(stdout);
-
-    // Alternatively you can handle the errors by yourself
-    cflag_error err = cflag_get_error();
-
-    // All existing errors are inside the enum cflag_errors and all
-    // start with the prefix CFLAG_ERROR
-    switch (err.error) {
-        case CFLAG_ERROR_UNKNOWN:
-            ...
-        break;
+    // Log the error to stderr
+    cflag_log_error(stderr);
     
-        ...
+    // Or handle the error manually
+    cflag_error err = cflag_get_error();
+    if (err.error == CFLAG_ERROR_UNKNOWN) {
+        printf("Unknown flag: %s\n", err.flag);
     }
 }
-
-
 ```
 
-Log all available options (to view output see example.c):
-```C
+### 4. Logging Options
 
-// You can also print a useful message, where all the names, descriptions and optionally
-// default values and bounds of the created flags are printed
-//               stream   printdefault  printminmax
-cflag_log_options(stdout, true,         true);
+You can automatically generate a help menu listing all registered flags.
 
+```c
+// stream, print_defaults
+cflag_log_options(stdout, true);
 ```
 
-For an example program checkout **[example.c](https://github.com/Moarbue/c-flags/blob/main/example.c)**. \
-Compile and run it like so:
-```
+## Example
 
-./build_example.sh
+For a complete demonstration, see **[example.c](example.c)**.
 
-./example -h
-
+Compile and run:
+```bash
+gcc example.c -o example
+./example -v -l 50 -t 0.75 -f logs.txt
 ```
