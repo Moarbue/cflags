@@ -1,5 +1,5 @@
-#ifndef _CFLAG_H
-#define _CFLAG_H
+#ifndef CFLAG_H
+#define CFLAG_H
 
 #include <assert.h>
 #include <stdbool.h>
@@ -37,6 +37,10 @@ typedef struct {
     char *value;             ///< The value that caused the error (if applicable).
 } cflag_error;
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /// \brief Creates a new boolean flag.
 /// \param name  the name of the flag (e.g., "-v")
@@ -178,7 +182,11 @@ cflag_error cflag_get_error();
 void cflag_log_options(FILE *stream, bool printdefault);
 
 
-#endif // _CFLAG_H
+#ifdef __cplusplus
+}
+#endif
+
+#endif // CFLAG_H
 
 #ifdef CFLAG_IMPLEMENTATION
 
@@ -234,8 +242,8 @@ union cflag_value {
 
 struct cflag_flag {
     enum cflag_type type; //value of the enum cflag_type
-    char *name;      // name
-    char *desc;      // short description
+    const char *name;      // name
+    const char *desc;      // short description
     union cflag_value def; // default value
     union cflag_value val; // current value
     void *value_ptr; // pointer to current value (either internal or external)
@@ -289,13 +297,13 @@ void cflag_long_double_ref(const char *name, const char *desc, long double *ref,
 
 void cflag_int_ref(const char *name, const char* desc, int *ref, int def)
 {
-#if INTPTR_MAX == INT64_MAX
+#if INT_MAX == INT64_MAX
     cflag_int64_ref(name, desc, (int64_t *)ref, (int64_t)def);
-#elif INTPTR_MAX == INT32_MAX
+#elif INT_MAX == INT32_MAX
     cflag_int32_ref(name, desc, (int32_t *)ref, (int32_t)def);
-#elif INTPTR_MAX == INT16_MAX
+#elif INT_MAX == INT16_MAX
     cflag_int16_ref(name, desc, (int16_t *)ref, (int16_t)def);
-#elif INTPTR_MAX == INT8_MAX
+#elif INT_MAX == INT8_MAX
     cflag_int8_ref(name, desc, (int8_t *)ref, (int8_t)def);
 #else
     #error "int size does not match 8/16/32/64 bits"
@@ -432,13 +440,13 @@ uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def)
 
 int * cflag_int(const char *name, const char* desc, int def)
 {
-#if INTPTR_MAX == INT64_MAX
+#if INT_MAX == INT64_MAX
     return (int *)cflag_int64(name, desc, (int64_t)def);
-#elif INTPTR_MAX == INT32_MAX
+#elif INT_MAX == INT32_MAX
     return (int *)cflag_int32(name, desc, (int32_t)def);
-#elif INTPTR_MAX == INT16_MAX
+#elif INT_MAX == INT16_MAX
     return (int *)cflag_int16(name, desc, (int16_t)def);
-#elif INTPTR_MAX == INT8_MAX
+#elif INT_MAX == INT8_MAX
     return (int *)cflag_int8(name, desc, (int8_t)def);
 #else
     #error "int size does not match 8/16/32/64 bits"
@@ -529,9 +537,54 @@ bool cflag_parse(int argc, char **argv)
                     }
                     break;
 
-                    case CFLAG_INT8:
-                    case CFLAG_INT16:
-                    case CFLAG_INT32:
+                    case CFLAG_INT8: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        int64_t val;
+                        int res = cflag__str2int_generic(&val, arg, INT8_MIN, INT8_MAX);
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
+                        *(int8_t *)(cflag__flags[i].value_ptr) = (int8_t)val;
+                    }
+                    break;
+
+                    case CFLAG_INT16: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        int64_t val;
+                        int res = cflag__str2int_generic(&val, arg, INT16_MIN, INT16_MAX);
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
+                        *(int16_t *)(cflag__flags[i].value_ptr) = (int16_t)val;
+                    }
+                    break;
+
+                    case CFLAG_INT32: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        int64_t val;
+                        int res = cflag__str2int_generic(&val, arg, INT32_MIN, INT32_MAX);
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
+                        *(int32_t *)(cflag__flags[i].value_ptr) = (int32_t)val;
+                    }
+                    break;
+
                     case CFLAG_INT64: {
                         if (argc == 0) {
                             cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
@@ -544,18 +597,59 @@ bool cflag_parse(int argc, char **argv)
                             cflag__set_error(res, flag_name, arg);
                             return false;
                         }
-                        if (cflag__flags[i].type == CFLAG_INT8) *(int8_t *)(cflag__flags[i].value_ptr) = (int8_t)val;
-                        else if (cflag__flags[i].type == CFLAG_INT16) *(int16_t *)(cflag__flags[i].value_ptr) = (int16_t)val;
-                        else if (cflag__flags[i].type == CFLAG_INT32) *(int32_t *)(cflag__flags[i].value_ptr) = (int32_t)val;
-                        else *(int64_t *)(cflag__flags[i].value_ptr) = val;
+                        *(int64_t *)(cflag__flags[i].value_ptr) = val;
                     }
                     break;
 
-                    case CFLAG_UINT8:
-                    case CFLAG_UINT16:
-                    case CFLAG_UINT32:
-                    case CFLAG_UINT64:
-                    case CFLAG_SIZE_T: {
+                    case CFLAG_UINT8: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        uint64_t val;
+                        int res = cflag__str2uint_generic(&val, arg, 0, UINT8_MAX);
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
+                        *(uint8_t *)(cflag__flags[i].value_ptr) = (uint8_t)val;
+                    }
+                    break;
+
+                    case CFLAG_UINT16: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        uint64_t val;
+                        int res = cflag__str2uint_generic(&val, arg, 0, UINT16_MAX);
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
+                        *(uint16_t *)(cflag__flags[i].value_ptr) = (uint16_t)val;
+                    }
+                    break;
+
+                    case CFLAG_UINT32: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        uint64_t val;
+                        int res = cflag__str2uint_generic(&val, arg, 0, UINT32_MAX);
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
+                        *(uint32_t *)(cflag__flags[i].value_ptr) = (uint32_t)val;
+                    }
+                    break;
+
+                    case CFLAG_UINT64: {
                         if (argc == 0) {
                             cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
@@ -567,16 +661,58 @@ bool cflag_parse(int argc, char **argv)
                             cflag__set_error(res, flag_name, arg);
                             return false;
                         }
-                        if (cflag__flags[i].type == CFLAG_UINT8) *(uint8_t *)(cflag__flags[i].value_ptr) = (uint8_t)val;
-                        else if (cflag__flags[i].type == CFLAG_UINT16) *(uint16_t *)(cflag__flags[i].value_ptr) = (uint16_t)val;
-                        else if (cflag__flags[i].type == CFLAG_UINT32) *(uint32_t *)(cflag__flags[i].value_ptr) = (uint32_t)val;
-                        else if (cflag__flags[i].type == CFLAG_SIZE_T) *(size_t *)(cflag__flags[i].value_ptr) = (size_t)val;
-                        else *(uint64_t *)(cflag__flags[i].value_ptr) = val;
+                        *(uint64_t *)(cflag__flags[i].value_ptr) = val;
                     }
                     break;
 
-                    case CFLAG_FLOAT:
-                    case CFLAG_DOUBLE:
+                    case CFLAG_SIZE_T: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        uint64_t val;
+                        int res = cflag__str2uint_generic(&val, arg, 0, SIZE_MAX);
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
+                        *(size_t *)(cflag__flags[i].value_ptr) = (size_t)val;
+                    }
+                    break;
+
+                    case CFLAG_FLOAT: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        long double val;
+                        int res = cflag__str2float_generic(&val, arg, -FLT_MAX, FLT_MAX);
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
+                        *(float *)(cflag__flags[i].value_ptr) = (float)val;
+                    }
+                    break;
+
+                    case CFLAG_DOUBLE: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        long double val;
+                        int res = cflag__str2float_generic(&val, arg, -DBL_MAX, DBL_MAX);
+                        if (res != CFLAG_ERROR_NONE) {
+                            cflag__set_error(res, flag_name, arg);
+                            return false;
+                        }
+                        *(double *)(cflag__flags[i].value_ptr) = (double)val;
+                    }
+                    break;
+
                     case CFLAG_LONG_DOUBLE: {
                         if (argc == 0) {
                             cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
@@ -589,9 +725,7 @@ bool cflag_parse(int argc, char **argv)
                             cflag__set_error(res, flag_name, arg);
                             return false;
                         }
-                        if (cflag__flags[i].type == CFLAG_FLOAT) *(float *)(cflag__flags[i].value_ptr) = (float)val;
-                        else if (cflag__flags[i].type == CFLAG_DOUBLE) *(double *)(cflag__flags[i].value_ptr) = (double)val;
-                        else *(long double *)(cflag__flags[i].value_ptr) = val;
+                        *(long double *)(cflag__flags[i].value_ptr) = val;
                     }
                     break;
 
@@ -680,77 +814,62 @@ void cflag_log_options(FILE *stream, bool printdefault)
 
 		switch(cflag__flags[i].type) {
 			case CFLAG_BOOL:
-                if (printdefault)
 				    fprintf(stream, "          Default: %s\n", cflag__flags[i].def.boolean ? "true" : "false");
 			break;
 
 			case CFLAG_CHAR:
-                if (printdefault)
 				    fprintf(stream, "          Default: %c\n", cflag__flags[i].def.character);
 			break;
 
 			case CFLAG_INT8:
-                if (printdefault)
 				    fprintf(stream, "          Default: %d\n", cflag__flags[i].def.int8);
 			break;
 
 			case CFLAG_UINT8:
-                if (printdefault)
 				    fprintf(stream, "          Default: %u\n", cflag__flags[i].def.uint8);
 			break;
 
 			case CFLAG_INT16:
-                if (printdefault)
 				    fprintf(stream, "          Default: %d\n", cflag__flags[i].def.int16);
 			break;
 
 			case CFLAG_UINT16:
-                if (printdefault)
 				    fprintf(stream, "          Default: %u\n", cflag__flags[i].def.uint16);
 			break;
 
 			case CFLAG_INT32:
-                if (printdefault)
 				    fprintf(stream, "          Default: %d\n", cflag__flags[i].def.int32);
 			break;
 
 			case CFLAG_UINT32:
-                if (printdefault)
 				    fprintf(stream, "          Default: %u\n", cflag__flags[i].def.uint32);
 			break;
 
 			case CFLAG_INT64:
-                if (printdefault)
 				    fprintf(stream, "          Default: %" PRId64 "\n", cflag__flags[i].def.int64);
 			break;
 
 			case CFLAG_UINT64:
-                if (printdefault)
 				    fprintf(stream, "          Default: %" PRIu64 "\n", cflag__flags[i].def.uint64);
 			break;
 
 			case CFLAG_FLOAT:
-                if (printdefault)
 				    fprintf(stream, "          Default: %f\n", cflag__flags[i].def.floating);
 			break;
 
 			case CFLAG_DOUBLE:
-                if (printdefault)
 				    fprintf(stream, "          Default: %f\n", cflag__flags[i].def.double_val);
 			break;
 
 			case CFLAG_LONG_DOUBLE:
-                if (printdefault)
 				    fprintf(stream, "          Default: %Lf\n", cflag__flags[i].def.long_double);
 			break;
 
 			case CFLAG_STRING:
-                if (printdefault)
 				    fprintf(stream, "          Default: %s\n", cflag__flags[i].def.string);
 			break;
 
 			case CFLAG_SIZE_T:
-                if (printdefault)
 				    fprintf(stream, "          Default: %zu\n", cflag__flags[i].def.size);
 			break;
 
