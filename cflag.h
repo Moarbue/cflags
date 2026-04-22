@@ -31,36 +31,51 @@ typedef struct {
 
 /// \brief Creates a new boolean flag.
 bool * cflag_bool(const char *name, const char *desc, bool def);
+void cflag_bool_ref(const char *name, const char *desc, bool *ref, bool def);
 
 /// \brief Creates a new char flag.
 char * cflag_char(const char *name, const char *desc, char def);
+void cflag_char_ref(const char *name, const char *desc, char *ref, char def);
 
 /// \brief Creates a new int8 flag.
 int8_t * cflag_int8(const char *name, const char *desc, int8_t def);
+void cflag_int8_ref(const char *name, const char *desc, int8_t *ref, int8_t def);
 uint8_t * cflag_uint8(const char *name, const char *desc, uint8_t def);
+void cflag_uint8_ref(const char *name, const char *desc, uint8_t *ref, uint8_t def);
 
 /// \brief Creates a new int16 flag.
 int16_t * cflag_int16(const char *name, const char *desc, int16_t def);
+void cflag_int16_ref(const char *name, const char *desc, int16_t *ref, int16_t def);
 uint16_t * cflag_uint16(const char *name, const char *desc, uint16_t def);
+void cflag_uint16_ref(const char *name, const char *desc, uint16_t *ref, uint16_t def);
 
 /// \brief Creates a new int32 flag.
 int32_t * cflag_int32(const char *name, const char *desc, int32_t def);
+void cflag_int32_ref(const char *name, const char *desc, int32_t *ref, int32_t def);
 uint32_t * cflag_uint32(const char *name, const char *desc, uint32_t def);
+void cflag_uint32_ref(const char *name, const char *desc, uint32_t *ref, uint32_t def);
 
 /// \brief Creates a new int64 flag.
 int64_t * cflag_int64(const char *name, const char *desc, int64_t def);
+void cflag_int64_ref(const char *name, const char *desc, int64_t *ref, int64_t def);
 uint64_t * cflag_uint64(const char *name, const char *desc, uint64_t def);
+void cflag_uint64_ref(const char *name, const char *desc, uint64_t *ref, uint64_t def);
 
 /// \brief Creates a new integer flag.
 int * cflag_int(const char *name, const char* desc, int def);
+void cflag_int_ref(const char *name, const char* desc, int *ref, int def);
 
 /// \brief Creates a new floating-point-number flag.
 float * cflag_float(const char *name, const char* desc, float def);
+void cflag_float_ref(const char *name, const char* desc, float *ref, float def);
 double * cflag_double(const char *name, const char* desc, double def);
+void cflag_double_ref(const char *name, const char* desc, double *ref, double def);
 long double * cflag_long_double(const char *name, const char* desc, long double def);
+void cflag_long_double_ref(const char *name, const char* desc, long double *ref, long double def);
 
 /// \brief Creates a new string flag.
 char ** cflag_string(const char *name, const char* desc, const char *def);
+void cflag_string_ref(const char *name, const char* desc, char **ref, const char *def);
 
 
 /// \brief Creates a new floating-point-number flag.
@@ -106,6 +121,50 @@ void cflag_log_options(FILE *stream, bool printdefault);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define CFLAG_REF_IMPL(type_enum, type_t, field_name) \
+void cflag_##type_t##_ref(const char *name, const char *desc, type_t *ref, type_t def) \
+{ \
+    struct cflag_flag *flag = cflag__new(type_enum, name, desc); \
+    flag->def.field_name = def; \
+    *ref = def; \
+    flag->value_ptr = ref; \
+}
+
+CFLAG_REF_IMPL(CFLAG_BOOL, bool, boolean)
+CFLAG_REF_IMPL(CFLAG_CHAR, char, character)
+CFLAG_REF_IMPL(CFLAG_INT8, int8_t, int8)
+CFLAG_REF_IMPL(CFLAG_UINT8, uint8_t, uint8)
+CFLAG_REF_IMPL(CFLAG_INT16, int16_t, int16)
+CFLAG_REF_IMPL(CFLAG_UINT16, uint16_t, uint16)
+CFLAG_REF_IMPL(CFLAG_INT32, int32_t, int32)
+CFLAG_REF_IMPL(CFLAG_UINT32, uint32_t, uint32)
+CFLAG_REF_IMPL(CFLAG_INT64, int64_t, int64)
+CFLAG_REF_IMPL(CFLAG_UINT64, uint64_t, uint64)
+CFLAG_REF_IMPL(CFLAG_FLOAT, float, floating)
+CFLAG_REF_IMPL(CFLAG_DOUBLE, double, double_val)
+CFLAG_REF_IMPL(CFLAG_LONG_DOUBLE, long double, long_double)
+
+void cflag_int_ref(const char *name, const char* desc, int *ref, int def)
+{
+#if sizeof(int) == 8
+    cflag_int64_ref(name, desc, (int64_t *)ref, (int64_t)def);
+#elif sizeof(int) == 4
+    cflag_int32_ref(name, desc, (int32_t *)ref, (int32_t)def);
+#elif sizeof(int) == 2
+    cflag_int16_ref(name, desc, (int16_t *)ref, (int16_t)def);
+#else
+    cflag_int8_ref(name, desc, (int8_t *)ref, (int8_t)def);
+#endif
+}
+
+void cflag_string_ref(const char *name, const char* desc, char **ref, const char *def)
+{
+    struct cflag_flag *flag = cflag__new(CFLAG_STRING, name, desc);
+    flag->def.string = (char *)def;
+    *ref = (char *)def;
+    flag->value_ptr = ref;
+}
 
 enum cflag_type {
     CFLAG_BOOL,
