@@ -407,86 +407,98 @@ bool cflag_parse(int argc, char **argv)
             if (strcmp(cflag__flags[i].name, flag_name) == 0) {
                 // check type of flag and parse accordingly
                 switch (cflag__flags[i].type) {
-                     case CFLAG_BOOL: {
-                         *(bool *)(cflag__flags[i].value_ptr) = true;
-                     }
-                     break;
+                    case CFLAG_BOOL: {
+                        *(bool *)(cflag__flags[i].value_ptr) = true;
+                    }
+                    break;
 
-                    case CFLAG_INT: {
-                        // check if a value was provided
+                    case CFLAG_CHAR: {
                         if (argc == 0) {
                             cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
-                        // provided value as string
                         char *arg = cflag__shift_args(&argc, &argv);
+                        if (arg[0] == '\0') {
+                            cflag__set_error(CFLAG_ERROR_INVALID_NUMBER, flag_name, arg);
+                            return false;
+                        }
+                        *(char *)(cflag__flags[i].value_ptr) = arg[0];
+                    }
+                    break;
 
-                        int val;
-                        int res = cflag__str2int(&val, arg, INT_MIN, INT_MAX);
-
+                    case CFLAG_INT8:
+                    case CFLAG_INT16:
+                    case CFLAG_INT32:
+                    case CFLAG_INT64: {
+                        if (argc == 0) {
+                            cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
+                            return false;
+                        }
+                        char *arg = cflag__shift_args(&argc, &argv);
+                        int64_t val;
+                        int res = cflag__str2int_generic(&val, arg, INT64_MIN, INT64_MAX);
                         if (res != CFLAG_ERROR_NONE) {
                             cflag__set_error(res, flag_name, arg);
                             return false;
                         }
+                        if (cflag__flags[i].type == CFLAG_INT8) *(int8_t *)(cflag__flags[i].value_ptr) = (int8_t)val;
+                        else if (cflag__flags[i].type == CFLAG_INT16) *(int16_t *)(cflag__flags[i].value_ptr) = (int16_t)val;
+                        else if (cflag__flags[i].type == CFLAG_INT32) *(int32_t *)(cflag__flags[i].value_ptr) = (int32_t)val;
+                        else *(int64_t *)(cflag__flags[i].value_ptr) = val;
+                    }
+                    break;
 
-                        *(int *)(cflag__flags[i].value_ptr) = val;
-                     }
-                     break;
-
+                    case CFLAG_UINT8:
+                    case CFLAG_UINT16:
+                    case CFLAG_UINT32:
                     case CFLAG_UINT64: {
-                        // check if a value was provided
                         if (argc == 0) {
                             cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
-                        // provided value as string
                         char *arg = cflag__shift_args(&argc, &argv);
-                        
                         uint64_t val;
-                        int res = cflag__str2uint64(&val, arg, 0, UINT64_MAX);
-
+                        int res = cflag__str2uint_generic(&val, arg, 0, UINT64_MAX);
                         if (res != CFLAG_ERROR_NONE) {
                             cflag__set_error(res, flag_name, arg);
                             return false;
                         }
+                        if (cflag__flags[i].type == CFLAG_UINT8) *(uint8_t *)(cflag__flags[i].value_ptr) = (uint8_t)val;
+                        else if (cflag__flags[i].type == CFLAG_UINT16) *(uint16_t *)(cflag__flags[i].value_ptr) = (uint16_t)val;
+                        else if (cflag__flags[i].type == CFLAG_UINT32) *(uint32_t *)(cflag__flags[i].value_ptr) = (uint32_t)val;
+                        else *(uint64_t *)(cflag__flags[i].value_ptr) = val;
+                    }
+                    break;
 
-                        *(uint64_t *)(cflag__flags[i].value_ptr) = val;
-                     }
-                     break;
-
-                    case CFLAG_FLOAT: {
-                        // check if value was provided
+                    case CFLAG_FLOAT:
+                    case CFLAG_DOUBLE:
+                    case CFLAG_LONG_DOUBLE: {
                         if (argc == 0) {
                             cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
-                        // provied value as string
                         char *arg = cflag__shift_args(&argc, &argv);
-
-                        float val;
-                        int res = cflag__str2float(&val, arg, -FLT_MAX, FLT_MAX);
-
+                        long double val;
+                        int res = cflag__str2float_generic(&val, arg, -LDBL_MAX, LDBL_MAX);
                         if (res != CFLAG_ERROR_NONE) {
                             cflag__set_error(res, flag_name, arg);
                             return false;
                         }
-
-                        *(float *)(cflag__flags[i].value_ptr) = val;
-                     }
-                     break;
+                        if (cflag__flags[i].type == CFLAG_FLOAT) *(float *)(cflag__flags[i].value_ptr) = (float)val;
+                        else if (cflag__flags[i].type == CFLAG_DOUBLE) *(double *)(cflag__flags[i].value_ptr) = (double)val;
+                        else *(long double *)(cflag__flags[i].value_ptr) = val;
+                    }
+                    break;
 
                     case CFLAG_STRING: {
-                        // check if value was provided
                         if (argc == 0) {
                             cflag__set_error(CFLAG_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
-                        // provided value as string
                         char *arg = cflag__shift_args(&argc, &argv);
-
                         *(char **)(cflag__flags[i].value_ptr) = arg;
-                     }
-                     break;
+                    }
+                    break;
 
                     case CFLAG_TYPE_COUNT:
                     default: {
@@ -496,6 +508,7 @@ bool cflag_parse(int argc, char **argv)
                 // exit loop if we successfully parsed the flag
                 break;
             }
+
         }
         
         // check if we parsed the flag
@@ -627,18 +640,17 @@ static char * cflag__shift_args(int *argc, char ***argv)
     return res;
 }
 
-// converts a string to an integer and checks if the integer is between the specified range
-static int cflag__str2int(int *out, char *s, int min, int max) {
+// converts a string to a signed integer of specified width and checks if it's within range
+static int cflag__str2int_generic(int64_t *out, char *s, int64_t min, int64_t max) {
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
         return CFLAG_ERROR_INVALID_NUMBER;
-    errno = 1;
-    long l = strtol(s, &end, 10);
-    /* Both checks are needed because INT_MAX == LONG_MAX is possible. */
-    if (l > INT_MAX || (errno == ERANGE && l == LONG_MAX))
-        return CFLAG_ERROR_OVERFLOW;
-    if (l < INT_MIN || (errno == ERANGE && l == LONG_MIN))
-        return CFLAG_ERROR_UNDERFLOW;
+    errno = 0;
+    long long l = strtoll(s, &end, 10);
+    if (errno == ERANGE) {
+        if (l == LLONG_MAX) return CFLAG_ERROR_OVERFLOW;
+        if (l == LLONG_MIN) return CFLAG_ERROR_UNDERFLOW;
+    }
     if (*end != '\0')
         return CFLAG_ERROR_INVALID_NUMBER;
     if (min > l || l > max)
@@ -647,43 +659,34 @@ static int cflag__str2int(int *out, char *s, int min, int max) {
     return CFLAG_ERROR_NONE;
 }
 
-// converts a string to an uint64 and checks if the uint64 is between the specified range
-static int cflag__str2uint64(uint64_t *out, char *s, uint64_t min, uint64_t max)
-{
-    #if defined(static_assert)
-    static_assert(sizeof(unsigned long long int) == sizeof(uint64_t), "Please adjust to your needs.");
-    #endif
+// converts a string to an unsigned integer of specified width and checks if it's within range
+static int cflag__str2uint_generic(uint64_t *out, char *s, uint64_t min, uint64_t max) {
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
         return CFLAG_ERROR_INVALID_NUMBER;
-    errno = 1;
-    unsigned long long int res = strtoull(s, &end, 10);
-    if (res == ULLONG_MAX && errno == ERANGE)
+    errno = 0;
+    unsigned long long u = strtoull(s, &end, 10);
+    if (errno == ERANGE)
         return CFLAG_ERROR_OVERFLOW;
     if (*end != '\0')
         return CFLAG_ERROR_INVALID_NUMBER;
-    if (min > res || res > max)
+    if (min > u || u > max)
         return CFLAG_ERROR_OUT_OF_BOUNDS;
-    *out = res;
+    *out = u;
     return CFLAG_ERROR_NONE;
 }
 
-// converts a string to a float and checks if the float is between the specified range
-static int cflag__str2float(float *out, char *s, float min, float max)
-{
+// converts a string to a float and checks if it's within range
+static int cflag__str2float_generic(long double *out, char *s, long double min, long double max) {
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
         return CFLAG_ERROR_INVALID_NUMBER;
-    errno = 1;
-    float res = strtof(s, &end);
-    if (res == HUGE_VALF && errno == ERANGE)
-        return CFLAG_ERROR_OVERFLOW;
-    if (res == -HUGE_VALF && errno == ERANGE)
-        return CFLAG_ERROR_OVERFLOW;
-    if (res < FLT_MIN && errno == ERANGE)
-        return CFLAG_ERROR_UNDERFLOW;
-    if (res < -FLT_MIN && errno == ERANGE)
-        return CFLAG_ERROR_UNDERFLOW;
+    errno = 0;
+    long double res = strtold(s, &end);
+    if (errno == ERANGE) {
+        if (res == HUGE_VALL) return CFLAG_ERROR_OVERFLOW;
+        if (res == -HUGE_VALL) return CFLAG_ERROR_UNDERFLOW;
+    }
     if (*end != '\0')
         return CFLAG_ERROR_INVALID_NUMBER;
     if (min > res || res > max)
