@@ -275,6 +275,7 @@ static struct cargs_flag *cargs__new(enum cargs_type type, const char *name, con
 static char * cargs__shift_args(int *argc, char ***argv);
 static void cargs__set_error(enum cargs_errors err, const char *flag, char *value);
 static int cargs__find_next_positional();
+static int cargs__is_flag(const char *arg);
 static int cargs__str2int_generic(int64_t *out, char *s, int64_t min, int64_t max);
 static int cargs__str2uint_generic(uint64_t *out, char *s, uint64_t min, uint64_t max);
 static int cargs__str2float_generic(long double *out, char *s, long double min, long double max);
@@ -549,21 +550,17 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_CHAR: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
-                        if (arg[0] == '\0') {
-                            cargs__set_error(CARGS_ERROR_INVALID_NUMBER, flag_name, arg);
-                            return false;
-                        }
                         *(char *)(cargs__flags[i].value_ptr) = arg[0];
                     }
                     break;
 
                     case CARGS_INT8: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -579,7 +576,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_INT16: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -595,7 +592,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_INT32: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -611,7 +608,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_INT64: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -627,7 +624,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_UINT8: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -643,7 +640,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_UINT16: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -659,7 +656,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_UINT32: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -675,7 +672,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_UINT64: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -691,7 +688,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_SIZE_T: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -707,7 +704,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_FLOAT: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -723,7 +720,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_DOUBLE: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -739,7 +736,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_LONG_DOUBLE: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -755,7 +752,7 @@ bool cargs_parse(int argc, char **argv)
                     break;
 
                     case CARGS_STRING: {
-                        if (argc == 0) {
+                        if (argc == 0 || cargs__is_flag(*argv)) {
                             cargs__set_error(CARGS_ERROR_NO_VALUE, flag_name, NULL);
                             return false;
                         }
@@ -777,6 +774,11 @@ bool cargs_parse(int argc, char **argv)
         
         // check if we parsed the flag
         if (i == cargs__count) {
+            // If the unknown argument looks like a flag, report error
+            if (cargs__is_flag(flag_name)) {
+                cargs__set_error(CARGS_ERROR_UNKNOWN, flag_name, NULL);
+                return false;
+            }
             // Try to assign to a positional argument
             int pos_idx = cargs__find_next_positional();
             if (pos_idx != -1) {
@@ -1034,6 +1036,11 @@ static int cargs__find_next_positional()
         }
     }
     return -1;
+}
+
+static int cargs__is_flag(const char *arg)
+{
+    return arg != NULL && arg[0] == '-';
 }
 
 #endif //CARGS_IMPLEMENTATION
