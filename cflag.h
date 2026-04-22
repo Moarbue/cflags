@@ -579,9 +579,44 @@ void cflag_log_options(FILE *stream, bool printdefault)
 				    fprintf(stream, "          Default: %s\n", cflag__flags[i].def.boolean ? "true" : "false");
 			break;
 
-			case CFLAG_INT:
+			case CFLAG_CHAR:
                 if (printdefault)
-				    fprintf(stream, "          Default: %d\n", cflag__flags[i].def.integer);
+				    fprintf(stream, "          Default: %c\n", cflag__flags[i].def.character);
+			break;
+
+			case CFLAG_INT8:
+                if (printdefault)
+				    fprintf(stream, "          Default: %d\n", cflag__flags[i].def.int8);
+			break;
+
+			case CFLAG_UINT8:
+                if (printdefault)
+				    fprintf(stream, "          Default: %u\n", cflag__flags[i].def.uint8);
+			break;
+
+			case CFLAG_INT16:
+                if (printdefault)
+				    fprintf(stream, "          Default: %d\n", cflag__flags[i].def.int16);
+			break;
+
+			case CFLAG_UINT16:
+                if (printdefault)
+				    fprintf(stream, "          Default: %u\n", cflag__flags[i].def.uint16);
+			break;
+
+			case CFLAG_INT32:
+                if (printdefault)
+				    fprintf(stream, "          Default: %d\n", cflag__flags[i].def.int32);
+			break;
+
+			case CFLAG_UINT32:
+                if (printdefault)
+				    fprintf(stream, "          Default: %u\n", cflag__flags[i].def.uint32);
+			break;
+
+			case CFLAG_INT64:
+                if (printdefault)
+				    fprintf(stream, "          Default: %" PRId64 "\n", cflag__flags[i].def.int64);
 			break;
 
 			case CFLAG_UINT64:
@@ -592,6 +627,16 @@ void cflag_log_options(FILE *stream, bool printdefault)
 			case CFLAG_FLOAT:
                 if (printdefault)
 				    fprintf(stream, "          Default: %f\n", cflag__flags[i].def.floating);
+			break;
+
+			case CFLAG_DOUBLE:
+                if (printdefault)
+				    fprintf(stream, "          Default: %f\n", cflag__flags[i].def.double_val);
+			break;
+
+			case CFLAG_LONG_DOUBLE:
+                if (printdefault)
+				    fprintf(stream, "          Default: %Lf\n", cflag__flags[i].def.long_double);
 			break;
 
 			case CFLAG_STRING:
@@ -605,6 +650,7 @@ void cflag_log_options(FILE *stream, bool printdefault)
 				exit(69);
 			break;
 		}
+
 	}
 }
 
