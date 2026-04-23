@@ -169,6 +169,11 @@ void cargs_string_ref(const char *name, const char* desc, char **ref, const char
 /// \returns a pointer to the argument's value; call cargs_parse() to update it.
 char ** cargs_positional(const char *name, const char *desc, bool mandatory);
 
+/// \brief Marks a flag as the help flag.
+/// When this flag is provided, cargs_parse() will skip mandatory positional argument validation.
+/// \param name The name of the flag to mark as help.
+void cargs_mark_help(const char *name);
+
 /// \brief Parses the flags given to the program and checks for matching flags.
 /// The first entry of the argv array (program name) is skipped.
 /// \param argc  The number of arguments in argv.
@@ -190,7 +195,10 @@ cargs_error cargs_get_error();
 /// \param printdefault Whether to print the default values for each flag.
 void cargs_log_options(FILE *stream, bool printdefault);
  
- 
+/// \brief Resets the parser to its initial state, clearing all registered flags and errors.
+/// Useful for testing and any scenario requiring re-registration and re-parsing.
+void cargs_reset(void);
+
 #ifdef __cplusplus
 
 }
@@ -260,6 +268,7 @@ struct cargs_flag {
     union cargs_value val; // current value
     void *value_ptr; // pointer to current value (either internal or external)
     bool mandatory; // whether the argument is mandatory (only for positionals)
+    bool is_help; // whether this flag triggers help output and skips mandatory validation
 };
 
 #ifndef CARGS_MAX_FLAGS
@@ -531,6 +540,17 @@ char ** cargs_positional(const char *name, const char *desc, bool mandatory)
     return (char **)flag->value_ptr;
 }
  
+void cargs_mark_help(const char *name)
+{
+    for (uint32_t i = 0; i < cargs__count; ++i) {
+        if (strcmp(cargs__flags[i].name, name) == 0) {
+            cargs__flags[i].is_help = true;
+            return;
+        }
+    }
+    assert(0 && "cargs_mark_help: flag name not found — register the flag before marking it as help");
+}
+
 bool cargs_parse(int argc, char **argv)
 {
     if (cargs__parsed) {
@@ -544,6 +564,21 @@ bool cargs_parse(int argc, char **argv)
 
     while (argc > 0) {
         char *flag_name = cargs__shift_args(&argc, &argv);
+
+        // "--" sentinel: treat all remaining args as positionals
+        if (strcmp(flag_name, "--") == 0) {
+            while (argc > 0) {
+                char *pos = cargs__shift_args(&argc, &argv);
+                int pos_idx = cargs__find_next_positional();
+                if (pos_idx == -1) {
+                    cargs__set_error(CARGS_ERROR_UNKNOWN, pos, NULL);
+                    return false;
+                }
+                cargs__flags[pos_idx].val.string = pos;
+                *(char **)(cargs__flags[pos_idx].value_ptr) = pos;
+            }
+            break;
+        }
 
         uint32_t i;
         for (i = 0; i < cargs__count; ++i) {
@@ -562,6 +597,11 @@ bool cargs_parse(int argc, char **argv)
                             return false;
                         }
                         char *arg = cargs__shift_args(&argc, &argv);
+                        // silently taking arg[0] would swallow typos like --flag "ab"
+                        if (arg[1] != '\0') {
+                            cargs__set_error(CARGS_ERROR_INVALID_NUMBER, flag_name, arg);
+                            return false;
+                        }
                         *(char *)(cargs__flags[i].value_ptr) = arg[0];
                     }
                     break;
@@ -722,7 +762,13 @@ bool cargs_parse(int argc, char **argv)
                             cargs__set_error(res, flag_name, arg);
                             return false;
                         }
-                        *(float *)(cargs__flags[i].value_ptr) = (float)val;
+                        // long double -> float narrowing can produce ±Inf even within ±FLT_MAX range
+                        float narrowed = (float)val;
+                        if (!isfinite(narrowed)) {
+                            cargs__set_error(CARGS_ERROR_OVERFLOW, flag_name, arg);
+                            return false;
+                        }
+                        *(float *)(cargs__flags[i].value_ptr) = narrowed;
                     }
                     break;
 
@@ -798,6 +844,13 @@ bool cargs_parse(int argc, char **argv)
         }
     }
     
+    // Check if any help flag is set
+    for (uint32_t i = 0; i < cargs__count; ++i) {
+        if (cargs__flags[i].is_help && cargs__flags[i].type == CARGS_BOOL && cargs__flags[i].val.boolean) {
+            return true;
+        }
+    }
+
     // Validate mandatory positionals
     for (uint32_t i = 0; i < cargs__count; ++i) {
         if (cargs__flags[i].type == CARGS_POSITIONAL && cargs__flags[i].mandatory) {
@@ -857,6 +910,16 @@ void cargs_log_error(FILE *stream)
 
 cargs_error cargs_get_error() {
     return cargs__err;
+}
+
+void cargs_reset(void)
+{
+    memset(cargs__flags, 0, sizeof(cargs__flags));
+    cargs__count  = 0;
+    cargs__parsed = false;
+    cargs__err.error = CARGS_ERROR_NONE;
+    cargs__err.flag  = NULL;
+    cargs__err.value = NULL;
 }
 
 void cargs_log_options(FILE *stream, bool printdefault)
@@ -947,6 +1010,8 @@ void cargs_log_options(FILE *stream, bool printdefault)
 // allocate a new flag on the local stack with provided type, name and description
 static struct cargs_flag *cargs__new(enum cargs_type type, const char *name, const char *desc)
 {
+    assert(!cargs__parsed && "Flag registered after cargs_parse() was called — register all flags before parsing!");
+
     // Check for duplicate flag name
     for (uint32_t j = 0; j < cargs__count; ++j) {
         if (strcmp(cargs__flags[j].name, name) == 0) {
@@ -1004,6 +1069,9 @@ static enum cargs_errors cargs__str2uint_generic(uint64_t *out, char *s, uint64_
     char *end;
     if (s[0] == '\0' || isspace(s[0]))
         return CARGS_ERROR_INVALID_NUMBER;
+    // strtoull wraps negatives silently (no ERANGE, valid *end) — catch explicitly
+    if (s[0] == '-')
+        return CARGS_ERROR_UNDERFLOW;
     errno = 0;
     unsigned long long u = strtoull(s, &end, 10);
     if (errno == ERANGE)
@@ -1028,6 +1096,9 @@ static enum cargs_errors cargs__str2float_generic(long double *out, char *s, lon
         if (res == -HUGE_VALL) return CARGS_ERROR_UNDERFLOW;
     }
     if (*end != '\0')
+        return CARGS_ERROR_INVALID_NUMBER;
+    // reject "nan", "inf", "-inf" etc. — strtold accepts them without error
+    if (!isfinite(res))
         return CARGS_ERROR_INVALID_NUMBER;
     if (min > res || res > max)
         return CARGS_ERROR_OUT_OF_BOUNDS;
@@ -1054,7 +1125,8 @@ static int cargs__find_next_positional()
 
 static int cargs__is_flag(const char *arg)
 {
-    return arg != NULL && arg[0] == '-';
+    // bare "-" is a conventional stdin token, not a flag
+    return arg != NULL && arg[0] == '-' && arg[1] != '\0';
 }
 
 #endif //CARGS_IMPLEMENTATION
