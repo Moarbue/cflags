@@ -26,7 +26,7 @@ enum cargs_errors {
     CARGS_ERROR_UNDERFLOW,      ///< The provided number is below the minimum representable value.
     CARGS_ERROR_OUT_OF_BOUNDS,  ///< The value is outside the specified range (unused in current version).
     CARGS_ERROR_MISSING_POSITIONAL, ///< A mandatory positional argument was not provided.
- 
+
     CARGS_ERROR_COUNT,
 
 };
@@ -161,7 +161,7 @@ void cargs_long_double_ref(const char *name, const char* desc, long double *ref,
 char ** cargs_string(const char *name, const char* desc, const char *def);
 /// \brief Binds a string flag to an external variable.
 void cargs_string_ref(const char *name, const char* desc, char **ref, const char *def);
- 
+
 /// \brief Creates a new positional argument.
 /// \param name  the name of the argument (for help output)
 /// \param desc  a short description of the argument
@@ -194,7 +194,7 @@ cargs_error cargs_get_error();
 /// \param stream The output stream (e.g., stdout).
 /// \param printdefault Whether to print the default values for each flag.
 void cargs_log_options(FILE *stream, bool printdefault);
- 
+
 /// \brief Resets the parser to its initial state, clearing all registered flags and errors.
 /// Useful for testing and any scenario requiring re-registration and re-parsing.
 void cargs_reset(void);
@@ -236,7 +236,7 @@ enum cargs_type {
     CARGS_STRING,
     CARGS_SIZE_T,
     CARGS_POSITIONAL,
- 
+
     CARGS_TYPE_COUNT,
 
 };
@@ -532,14 +532,14 @@ char ** cargs_string(const char *name, const char* desc, const char *def)
 char ** cargs_positional(const char *name, const char *desc, bool mandatory)
 {
     struct cargs_flag *flag = cargs__new(CARGS_POSITIONAL, name, desc);
-     
+
     flag->mandatory = mandatory;
     flag->val.string = NULL;
     flag->value_ptr = &flag->val.string;
 
     return (char **)flag->value_ptr;
 }
- 
+
 void cargs_mark_help(const char *name)
 {
     for (uint32_t i = 0; i < cargs__count; ++i) {
@@ -824,7 +824,7 @@ bool cargs_parse(int argc, char **argv)
             }
 
         }
-        
+
         // check if we parsed the flag
         if (i == cargs__count) {
             // If the unknown argument looks like a flag, report error
@@ -843,7 +843,7 @@ bool cargs_parse(int argc, char **argv)
             }
         }
     }
-    
+
     // Check if any help flag is set
     for (uint32_t i = 0; i < cargs__count; ++i) {
         if (cargs__flags[i].is_help && cargs__flags[i].type == CARGS_BOOL && cargs__flags[i].val.boolean) {
@@ -860,7 +860,7 @@ bool cargs_parse(int argc, char **argv)
             }
         }
     }
-    
+
     return true;
 }
 
@@ -868,7 +868,7 @@ void cargs_log_error(FILE *stream)
 {
     char cargs__type[] = "command";
     if (cargs__err.flag != NULL && *cargs__err.flag == '-') strcpy(cargs__type, "flag");
-    
+
     switch (cargs__err.error) {
         case CARGS_ERROR_NONE:
             fprintf(stream, "No Error. Please only call cargs_log_error if flag_parse returned false!\n");
@@ -900,7 +900,7 @@ void cargs_log_error(FILE *stream)
     case CARGS_ERROR_MISSING_POSITIONAL:
         fprintf(stream, "ERROR: MISSING mandatory argument \"%s\"\n", cargs__err.flag);
         break;
-        
+
     case CARGS_ERROR_COUNT:
 
         default:
@@ -925,7 +925,7 @@ void cargs_reset(void)
 void cargs_log_options(FILE *stream, bool printdefault)
 {
     for (uint32_t i = 0; i < cargs__count; ++i) {
-		
+
 		fprintf(stream, "    %s\n", cargs__flags[i].name);
 		fprintf(stream, "          %s\n", cargs__flags[i].desc);
 
@@ -941,7 +941,7 @@ void cargs_log_options(FILE *stream, bool printdefault)
 	    case CARGS_CHAR:
 			fprintf(stream, "          Default: %c\n", cargs__flags[i].def.character);
 			break;
- 
+
 		case CARGS_INT8:
 			fprintf(stream, "          Default: %d\n", cargs__flags[i].def.int8);
 			break;
@@ -975,15 +975,15 @@ void cargs_log_options(FILE *stream, bool printdefault)
 			break;
 
 		case CARGS_FLOAT:
-			fprintf(stream, "          Default: %f\n", cargs__flags[i].def.floating);
+			fprintf(stream, "          Default: %g\n", cargs__flags[i].def.floating);
 			break;
 
 		case CARGS_DOUBLE:
-			fprintf(stream, "          Default: %f\n", cargs__flags[i].def.double_val);
+			fprintf(stream, "          Default: %g\n", cargs__flags[i].def.double_val);
 			break;
 
 		case CARGS_LONG_DOUBLE:
-			fprintf(stream, "          Default: %Lf\n", cargs__flags[i].def.long_double);
+			fprintf(stream, "          Default: %Lg\n", cargs__flags[i].def.long_double);
 			break;
 
 		case CARGS_STRING:
