@@ -17,6 +17,7 @@
         default = pkgs.mkShell.override { stdenv = pkgs.clangStdenv; } {
           packages = with pkgs; [
             clang-tools
+            gdb
           ];
         };
       });
