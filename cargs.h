@@ -176,7 +176,7 @@ CARGSDEF void cargs_print_help(FILE *stream)
 
 
 
-struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char short_name, validation_func_t *validation_func, const char *description)
+CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char short_name, validation_func_t *validation_func, const char *description)
 {
     if (cargs_state.parsed) cargs__panic("arguments already parsed");
     if (cargs_state.flags_allocated >= CARGS_MAX_FLAGS) cargs__panic("too many flags, define bigger CARGS_MAX_FLAGS");
@@ -186,15 +186,14 @@ struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_n
     if (description == NULL) cargs__panic("flag description cannot be NULL");
     if (short_name && strlen(long_name) == 1 && long_name[0] == short_name) cargs__panic("flag long_name and short_name cannot be the same");
 
-    // check for duplicate flag names
+    // check for duplicate flag names in globals
+    struct cargs_flag *check_flag = cargs_state.global_flags_head;
+    cargs__check_duplicate_flags(check_flag, long_name, short_name);
+
+    // check for duplicate flag names in subcommand chain
     struct cargs_subcommand *subcmd = cargs_state.current_subcommand;
     while (subcmd != NULL) {
-        struct cargs_flag *flag = subcmd->flags_head;
-        while (flag != NULL) {
-            if (strcmp(flag->long_name, long_name) == 0) cargs__panic("duplicate flag name: %s", long_name);
-            if (flag->short_name && flag->short_name == short_name) cargs__panic("duplicate flag name: %s", short_name);
-            flag = flag->next;
-        }
+        cargs__check_duplicate_flags(subcmd->flags_head, long_name, short_name);
         subcmd = subcmd->parent;
     }
 
@@ -219,7 +218,7 @@ struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_n
     return flag;
 }
 
-void cargs__panic_func(const char *file, int line, const char *message, ...)
+CARGSDEF void cargs__panic_func(const char *file, int line, const char *message, ...)
 {
     fprintf(stderr, "%s:%d: error: ", file, line);
     va_list args;
@@ -228,6 +227,15 @@ void cargs__panic_func(const char *file, int line, const char *message, ...)
     va_end(args);
     fprintf(stderr, "\n");
     exit(EXIT_FAILURE);
+}
+
+CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, char short_name)
+{
+    while (head != NULL) {
+        if (strcmp(head->long_name, long_name) == 0) cargs__panic("duplicate flag name: %s", long_name);
+        if (short_name != '\0' && head->short_name == short_name) cargs__panic("duplicate flag name: %c", short_name);
+        head = head->next;
+    }
 }
 
 #endif // CARGS_IMPLEMENTATION
