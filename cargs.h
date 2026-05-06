@@ -9,6 +9,10 @@
 #   error "CARGS_MAX_SUBCOMMANDS not defined"
 #endif
 
+#ifndef CARGS_MAX_ERROR_LEN
+#   define CARGS_MAX_ERROR_LEN 512
+#endif
+
 #ifndef CARGSDEF
 #   ifdef CARGS_STATIC
 #       define CARGSDEF static
@@ -43,7 +47,7 @@ CARGSDEF void cargs_string(const char *long_name, const char short_name, char **
 CARGSDEF void cargs_subcommand_start(const char *name, const char *description);
 CARGSDEF void cargs_subcommand_end(void);
 
-CARGSDEF void cargs_set_error(cargs_error error, const char *message);
+CARGSDEF void cargs_set_error(cargs_error error, const char *format, ...);
 CARGSDEF cargs_error cargs_get_error(void);
 CARGSDEF const char *cargs_get_error_message(void);
 CARGSDEF void cargs_log_error(FILE *stream);
@@ -105,6 +109,7 @@ static struct cargs_state {
     size_t subcommands_allocated;
 
     cargs_error error;
+    char error_message[CARGS_MAX_ERROR_LEN];
     bool parsed;
 } cargs_state = {0};
 
@@ -182,25 +187,33 @@ CARGSDEF void cargs_subcommand_end(void)
     cargs_state.current_subcommand = cargs_state.current_subcommand->parent;
 }
 
-CARGSDEF void cargs_set_error(cargs_error error, const char *message)
+CARGSDEF void cargs_set_error(cargs_error error, const char *format, ...)
 {
-    (void)error;
-    (void)message;
+    cargs_state.error = error;
+
+    if (format != NULL) {
+        va_list args;
+        va_start(args, format);
+        vsnprintf(cargs_state.error_message, sizeof(cargs_state.error_message), format, args);
+        va_end(args);
+    } else {
+        cargs_state.error_message[0] = '\0';
+    }
 }
 
 CARGSDEF cargs_error cargs_get_error(void)
 {
-    return CARGS_OK;
+    return cargs_state.error;
 }
 
 CARGSDEF const char *cargs_get_error_message(void)
 {
-    return NULL;
+    return cargs_state.error_message;
 }
 
 CARGSDEF void cargs_log_error(FILE *stream)
 {
-    (void)stream;
+    fprintf(stream, "Error: %s\n", cargs_state.error_message);
 }
 
 CARGSDEF int cargs_parse(int argc, char **argv)
