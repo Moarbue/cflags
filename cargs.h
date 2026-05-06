@@ -1,6 +1,14 @@
 #ifndef CARGS_H
 #define CARGS_H
 
+#ifndef CARGS_MAX_FLAGS
+#   error "CARGS_MAX_FLAGS not defined"
+#endif
+
+#ifndef CARGS_MAX_SUBCOMMANDS
+#   error "CARGS_MAX_SUBCOMMANDS not defined"
+#endif
+
 #ifndef CARGSDEF
 #   ifdef CARGS_STATIC
 #       define CARGSDEF static
@@ -14,7 +22,7 @@
 #include <stdio.h>
 
 // validation function type, which is called when parsing the argument of a flag
-typedef bool (validation_func)(const char *name, const char *value);
+typedef bool (validation_func_t)(const char *name, const char *value);
 
 typedef enum {
     CARGS_OK,
@@ -25,12 +33,12 @@ typedef enum {
 } cargs_error;
 
 
-CARGSDEF void cargs_int(const char *long_name, const char short_name, int8_t *reference, const int8_t default_value, validation_func *validate, const char *description);
-CARGSDEF void cargs_uint(const char *long_name, const char short_name, uint8_t *reference, const uint8_t default_value, validation_func *validate, const char *description);
-CARGSDEF void cargs_bool(const char *long_name, const char short_name, bool *reference, const bool default_value, validation_func *validate, const char *description);
-CARGSDEF void cargs_float(const char *long_name, const char short_name, float *reference, const float default_value, validation_func *validate, const char *description);
-CARGSDEF void cargs_char(const char *long_name, const char short_name, char *reference, const char default_value, validation_func *validate, const char *description);
-CARGSDEF void cargs_string(const char *long_name, const char short_name, char **reference, const char *default_value, validation_func *validate, const char *description);
+CARGSDEF void cargs_int(const char *long_name, const char short_name, int *reference, const int default_value, validation_func_t *validtion_func, const char *description);
+CARGSDEF void cargs_uint(const char *long_name, const char short_name, unsigned int *reference, const unsigned int default_value, validation_func_t *validtion_func, const char *description);
+CARGSDEF void cargs_bool(const char *long_name, const char short_name, bool *reference, const bool default_value, validation_func_t *validtion_func, const char *description);
+CARGSDEF void cargs_float(const char *long_name, const char short_name, float *reference, const float default_value, validation_func_t *validtion_func, const char *description);
+CARGSDEF void cargs_char(const char *long_name, const char short_name, char *reference, const char default_value, validation_func_t *validtion_func, const char *description);
+CARGSDEF void cargs_string(const char *long_name, const char short_name, char **reference, const char *default_value, validation_func_t *validtion_func, const char *description);
 
 CARGSDEF void cargs_subcommand_start(const char *name, const char *description);
 CARGSDEF void cargs_subcommand_end(void);
@@ -49,5 +57,177 @@ CARGSDEF void cargs_print_help(FILE *stream);
 
 #ifdef CARGS_IMPLEMENTATION
 
+#include <ctype.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+
+enum cargs_flag_type {
+    CARGS_FLAG_TYPE_INT,
+    CARGS_FLAG_TYPE_UINT,
+    CARGS_FLAG_TYPE_BOOL,
+    CARGS_FLAG_TYPE_FLOAT,
+    CARGS_FLAG_TYPE_CHAR,
+    CARGS_FLAG_TYPE_STRING,
+};
+
+struct cargs_flag {
+    struct cargs_flag *next;
+    enum cargs_flag_type type;
+    const char *long_name;
+    char short_name;
+    void *reference;
+    validation_func_t *validation_func;
+    const char *description;
+};
+
+struct cargs_subcommand {
+    struct cargs_subcommand *next;
+    const char *name;
+    const char *description;
+    struct cargs_subcommand *parent;
+    struct cargs_subcommand *children_head;
+    struct cargs_flag *flags_head;
+};
+
+static struct cargs_state {
+    const char *program_name;
+
+    struct cargs_flag *global_flags_head;
+    struct cargs_subcommand *root_subcommands_head;
+    struct cargs_subcommand *current_subcommand;
+
+    // Static memory pools
+    struct cargs_flag flag_pool[CARGS_MAX_FLAGS];
+    size_t flags_allocated;
+
+    struct cargs_subcommand subcommand_pool[CARGS_MAX_SUBCOMMANDS];
+    size_t subcommands_allocated;
+
+    cargs_error error;
+    bool parsed;
+} cargs_state = {0};
+
+struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char short_name, validation_func_t *validation_func, const char *description);
+void cargs__panic_func(const char *file, int line, const char *message, ...);
+#define cargs__panic(message, ...) cargs__panic_func(__FILE__, __LINE__, message, ##__VA_ARGS__)
+
+#define CARGS_FLAG(enum_type, function_suffix, type_identifier) \
+    void cargs_##function_suffix(const char *long_name, const char short_name, type_identifier *reference, const type_identifier default_value, validation_func_t *validation_func, const char *description) \
+    { \
+        struct cargs_flag *flag = cargs__new_flag(enum_type, long_name, short_name, validation_func, description); \
+        flag->reference = reference; \
+        *reference = (type_identifier)default_value; \
+    }
+
+CARGS_FLAG(CARGS_FLAG_TYPE_INT, int, int)
+CARGS_FLAG(CARGS_FLAG_TYPE_UINT, uint, unsigned int)
+CARGS_FLAG(CARGS_FLAG_TYPE_BOOL, bool, bool)
+CARGS_FLAG(CARGS_FLAG_TYPE_FLOAT, float, float)
+CARGS_FLAG(CARGS_FLAG_TYPE_CHAR, char, char)
+CARGS_FLAG(CARGS_FLAG_TYPE_STRING, string, char *)
+
+CARGSDEF void cargs_subcommand_start(const char *name, const char *description)
+{
+    (void)name;
+    (void)description;
+}
+
+CARGSDEF void cargs_subcommand_end(void)
+{
+}
+
+CARGSDEF void cargs_set_error(cargs_error error, const char *message)
+{
+    (void)error;
+    (void)message;
+}
+
+CARGSDEF cargs_error cargs_get_error(void)
+{
+    return CARGS_OK;
+}
+
+CARGSDEF const char *cargs_get_error_message(void)
+{
+    return NULL;
+}
+
+CARGSDEF void cargs_log_error(FILE *stream)
+{
+    (void)stream;
+}
+
+CARGSDEF int cargs_parse(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    return -1;
+}
+
+CARGSDEF void cargs_reset(void)
+{
+}
+
+CARGSDEF void cargs_print_help(FILE *stream)
+{
+    (void)stream;
+}
+
+
+
+struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char short_name, validation_func_t *validation_func, const char *description)
+{
+    if (cargs_state.parsed) cargs__panic("arguments already parsed");
+    if (cargs_state.flags_allocated >= CARGS_MAX_FLAGS) cargs__panic("too many flags, define bigger CARGS_MAX_FLAGS");
+    if (long_name == NULL) cargs__panic("flag long_name cannot be NULL");
+    if (!isalnum(long_name[0])) cargs__panic("flag long_name must start with an alphanumeric character");
+    if (short_name && !isalnum(short_name)) cargs__panic("flag short_name must be alphanumeric");
+    if (description == NULL) cargs__panic("flag description cannot be NULL");
+    if (short_name && strlen(long_name) == 1 && long_name[0] == short_name) cargs__panic("flag long_name and short_name cannot be the same");
+
+    // check for duplicate flag names
+    struct cargs_subcommand *subcmd = cargs_state.current_subcommand;
+    while (subcmd != NULL) {
+        struct cargs_flag *flag = subcmd->flags_head;
+        while (flag != NULL) {
+            if (strcmp(flag->long_name, long_name) == 0) cargs__panic("duplicate flag name: %s", long_name);
+            if (flag->short_name && flag->short_name == short_name) cargs__panic("duplicate flag name: %s", short_name);
+            flag = flag->next;
+        }
+        subcmd = subcmd->parent;
+    }
+
+    // create new flag
+    struct cargs_flag *flag = &cargs_state.flag_pool[cargs_state.flags_allocated++];
+    flag->next = NULL;
+    flag->type = type;
+    flag->long_name = long_name;
+    flag->short_name = short_name;
+    flag->validation_func = validation_func;
+    flag->description = description;
+
+    // append flag to linked list
+    struct cargs_flag **head = cargs_state.current_subcommand != NULL ? &cargs_state.current_subcommand->flags_head : &cargs_state.global_flags_head;
+    if (*head == NULL) *head = flag; // list is empty
+    else {
+        struct cargs_flag *curr = *head;
+        while (curr->next != NULL) curr = curr->next;
+        curr->next = flag;
+    }
+
+    return flag;
+}
+
+void cargs__panic_func(const char *file, int line, const char *message, ...)
+{
+    fprintf(stderr, "%s:%d: error: ", file, line);
+    va_list args;
+    va_start(args, message);
+    vfprintf(stderr, message, args);
+    va_end(args);
+    fprintf(stderr, "\n");
+    exit(EXIT_FAILURE);
+}
 
 #endif // CARGS_IMPLEMENTATION
