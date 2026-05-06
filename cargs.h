@@ -108,9 +108,10 @@ static struct cargs_state {
     bool parsed;
 } cargs_state = {0};
 
-struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char short_name, validation_func_t *validation_func, const char *description);
-void cargs__panic_func(const char *file, int line, const char *message, ...);
+CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char short_name, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs__panic_func(const char *file, int line, const char *message, ...);
 #define cargs__panic(message, ...) cargs__panic_func(__FILE__, __LINE__, message, ##__VA_ARGS__)
+CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, char short_name);
 
 #define CARGS_FLAG(enum_type, function_suffix, type_identifier) \
     void cargs_##function_suffix(const char *long_name, const char short_name, type_identifier *reference, const type_identifier default_value, validation_func_t *validation_func, const char *description) \
@@ -129,12 +130,56 @@ CARGS_FLAG(CARGS_FLAG_TYPE_STRING, string, char *)
 
 CARGSDEF void cargs_subcommand_start(const char *name, const char *description)
 {
-    (void)name;
-    (void)description;
+    if (cargs_state.parsed) cargs__panic("arguments already parsed");
+    if (cargs_state.subcommands_allocated >= CARGS_MAX_SUBCOMMANDS) cargs__panic("too many subcommands, define bigger CARGS_MAX_SUBCOMMANDS");
+    if (name == NULL) cargs__panic("subcommand name cannot be NULL");
+    if (!isalnum(name[0])) cargs__panic("subcommand name must start with an alphanumeric character");
+    if (description == NULL) cargs__panic("subcommand description cannot be NULL");
+
+    struct cargs_subcommand **head;
+
+    if (cargs_state.current_subcommand == NULL) {
+        head = &cargs_state.root_subcommands_head;
+    } else {
+        if (strcmp(cargs_state.current_subcommand->name, name) == 0) cargs__panic("duplicate subcommand name: %s", name);
+        head = &cargs_state.current_subcommand->children_head;
+    }
+
+    // check for duplicate subcommands at current level
+    struct cargs_subcommand *curr = *head;
+    while (curr != NULL) {
+        if (strcmp(curr->name, name) == 0) cargs__panic("duplicate subcommand name: %s", name);
+        curr = curr->next;
+    }
+
+    // create new subcommand
+    struct cargs_subcommand *subcmd = &cargs_state.subcommand_pool[cargs_state.subcommands_allocated++];
+    subcmd->next = NULL;
+    subcmd->name = name;
+    subcmd->description = description;
+    subcmd->parent = cargs_state.current_subcommand;
+    subcmd->children_head = NULL;
+    subcmd->flags_head = NULL;
+
+    // append subcommand to linked list
+    if (*head == NULL) {
+        *head = subcmd;
+    } else {
+        struct cargs_subcommand *curr = *head;
+        while (curr->next != NULL) curr = curr->next;
+        curr->next = subcmd;
+    }
+
+    // enter subcommand scope
+    cargs_state.current_subcommand = subcmd;
 }
 
 CARGSDEF void cargs_subcommand_end(void)
 {
+    if (cargs_state.parsed) cargs__panic("arguments already parsed");
+    if (cargs_state.current_subcommand == NULL) cargs__panic("unbalanced subcommand end: no active subcommand");
+
+    cargs_state.current_subcommand = cargs_state.current_subcommand->parent;
 }
 
 CARGSDEF void cargs_set_error(cargs_error error, const char *message)
