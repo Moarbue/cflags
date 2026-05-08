@@ -146,7 +146,6 @@ CARGSDEF void cargs_subcommand_start(const char *name, const char *description)
     if (cargs_state.current_subcommand == NULL) {
         head = &cargs_state.root_subcommands_head;
     } else {
-        if (strcmp(cargs_state.current_subcommand->name, name) == 0) cargs__panic("duplicate subcommand name: %s", name);
         head = &cargs_state.current_subcommand->children_head;
     }
 
@@ -244,15 +243,9 @@ CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const cha
     if (description == NULL) cargs__panic("flag description cannot be NULL");
     if (short_name && strlen(long_name) == 1 && long_name[0] == short_name) cargs__panic("flag long_name and short_name cannot be the same");
 
-    // check for duplicate flag names in globals
-    struct cargs_flag *check_flag = cargs_state.global_flags_head;
-    cargs__check_duplicate_flags(check_flag, long_name, short_name);
-
-    // check for duplicate flag names in subcommand chain
-    struct cargs_subcommand *subcmd = cargs_state.current_subcommand;
-    while (subcmd != NULL) {
-        cargs__check_duplicate_flags(subcmd->flags_head, long_name, short_name);
-        subcmd = subcmd->parent;
+    if (cargs_state.current_subcommand != NULL) {
+        // check for duplicate flag names in current scope
+        cargs__check_duplicate_flags(cargs_state.current_subcommand->flags_head, long_name, short_name);
     }
 
     // create new flag
