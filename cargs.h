@@ -28,6 +28,8 @@
 // validation function type, which is called when parsing the argument of a flag
 typedef bool (validation_func_t)(const char *name, const char *value);
 
+struct cargs_subcommand;
+
 typedef enum {
     CARGS_OK,
     CARGS_INVALID_ARGUMENT,
@@ -52,9 +54,13 @@ CARGSDEF cargs_error cargs_get_error(void);
 CARGSDEF const char *cargs_get_error_message(void);
 CARGSDEF void cargs_log_error(FILE *stream);
 
+CARGSDEF void cargs_set_program_description(const char *description);
 CARGSDEF int cargs_parse(int argc, char **argv);
 CARGSDEF void cargs_reset(void);
-CARGSDEF void cargs_print_help(FILE *stream);
+
+CARGSDEF struct cargs_subcommand *cargs_get_active_subcommand(void);
+CARGSDEF struct cargs_subcommand *cargs_get_subcommand(struct cargs_subcommand *parent, const char *name);
+CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd);
 
 
 #endif // CARGS_H
@@ -96,6 +102,7 @@ struct cargs_subcommand {
 
 static struct cargs_state {
     const char *program_name;
+    const char *program_description;
 
     struct cargs_flag *global_flags_head;
     struct cargs_subcommand *root_subcommands_head;
@@ -212,13 +219,21 @@ CARGSDEF const char *cargs_get_error_message(void)
 
 CARGSDEF void cargs_log_error(FILE *stream)
 {
+    if (cargs_state.error == CARGS_OK) return;
     fprintf(stream, "Error: %s\n", cargs_state.error_message);
+}
+
+CARGSDEF void cargs_set_program_description(const char *description)
+{
+    if (description == NULL) cargs__panic("program description must not be NULL");
+    cargs_state.program_description = description;
 }
 
 CARGSDEF int cargs_parse(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
+    cargs_state.parsed = true;
     return -1;
 }
 
@@ -226,9 +241,118 @@ CARGSDEF void cargs_reset(void)
 {
 }
 
-CARGSDEF void cargs_print_help(FILE *stream)
+CARGSDEF struct cargs_subcommand *cargs_get_active_subcommand(void)
 {
-    (void)stream;
+    return cargs_state.current_subcommand;
+}
+
+CARGSDEF struct cargs_subcommand *cargs_get_subcommand(struct cargs_subcommand *parent, const char *name)
+{
+    if (name == NULL) return NULL;
+
+    struct cargs_subcommand *head = (parent != NULL) ? parent->children_head : cargs_state.root_subcommands_head;
+
+    while (head != NULL) {
+        if (strcmp(head->name, name) == 0) return head;
+        head = head->next;
+    }
+
+    return NULL;
+}
+
+CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd)
+{
+    if (!cargs_state.parsed) cargs__panic("arguments not parsed");
+
+    char prefix[512] = {0};
+    snprintf(prefix, sizeof (prefix), "%s", cargs_state.program_name);
+
+    // traverse execution path to build prefix
+    if (cmd != NULL) {
+        struct cargs_subcommand *chain[CARGS_MAX_SUBCOMMANDS];
+        int depth = 0;
+        struct cargs_subcommand *curr = cmd;
+
+        while (curr != NULL) {
+            chain[depth++] = curr;
+            curr = curr->parent;
+        }
+
+        for (int i = depth - 1; i >= 0; i--) {
+            size_t p_len = strlen(prefix);
+            snprintf(prefix + p_len, sizeof(prefix) - p_len, " %s", chain[i]->name);
+        }
+    }
+
+    struct cargs_subcommand *children = cmd != NULL ? cmd->children_head : cargs_state.root_subcommands_head;
+    struct cargs_flag *flags = cmd != NULL ? cmd->flags_head : cargs_state.global_flags_head;
+
+    // print usage
+    fprintf(stream, "Usage: %s", prefix);
+    if (flags != NULL) fprintf(stream, " [<options>]");
+    if (children != NULL) fprintf(stream, " [<command>]");
+    fprintf(stream, "\n\n");
+
+    // print command description
+    if (cmd != NULL) {
+        fprintf(stream, "%s\n\n", cmd->description);
+    } else if (cargs_state.program_description != NULL) {
+        fprintf(stream, "%s\n\n", cargs_state.program_description);
+    }
+
+    // print child subcommands
+    if (children != NULL) {
+        int max_cmd_len = 0;
+        struct cargs_subcommand *curr = children;
+        while (curr != NULL) {
+            int len = strlen(curr->name);
+            if (len > max_cmd_len) max_cmd_len = len;
+            curr = curr->next;
+        }
+
+        fprintf(stream, "Commands:\n");
+        curr = children;
+        while (curr != NULL) {
+            fprintf(stream, "  %-*s  %s\n", max_cmd_len, curr->name, curr->description);
+            curr = curr->next;
+        }
+        fprintf(stream, "\n");
+    }
+
+    // print flags
+    if (flags != NULL) {
+        int max_flag_len = 0;
+        struct cargs_flag *curr = flags;
+        while (curr != NULL) {
+            int len = strlen(curr->long_name) + (curr->short_name ? 4 : 0);
+            if (len > max_flag_len) max_flag_len = len;
+            curr = curr->next;
+        }
+
+        fprintf(stream, "Options:\n");
+        curr = flags;
+        while (curr != NULL) {
+            fprintf(stream, "  ");
+
+            int cur_len = 0;
+            if (curr->short_name) {
+                fprintf(stream, "-%c, ", curr->short_name);
+                cur_len += 4;
+            } else {
+                fprintf(stream, "    ");
+            }
+
+            fprintf(stream, "--%s", curr->long_name);
+            cur_len += strlen(curr->long_name);
+
+            int pad = max_flag_len - cur_len + 2;
+
+            fprintf(stream, "%*s%s\n", pad, "", curr->description);
+
+            curr = curr->next;
+        }
+        fprintf(stream, "\n");
+    }
 }
 
 
