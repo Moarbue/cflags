@@ -259,7 +259,7 @@ CARGSDEF struct cargs_subcommand *cargs_get_subcommand(struct cargs_subcommand *
         head = head->next;
     }
 
-    return NULL;
+    cargs__panic("subcommand '%s' not found", name);
 }
 
 CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd)
@@ -326,7 +326,11 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd)
         int max_flag_len = 0;
         struct cargs_flag *curr = flags;
         while (curr != NULL) {
-            int len = strlen(curr->long_name) + 2 + (curr->short_name ? 4 : 0) + (curr->argument ? strlen(curr->argument) + 1 : 0);
+            int len = 0;
+            if (curr->short_name && curr->long_name) len += 4;
+            else if (curr->short_name) len += 3;
+            if (curr->long_name) len += strlen(curr->long_name) + 3;
+            if (curr->argument) len += strlen(curr->argument) + 1;
             if (len > max_flag_len) max_flag_len = len;
             curr = curr->next;
         }
@@ -337,20 +341,25 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd)
             fprintf(stream, "  ");
 
             int cur_len = 0;
-            if (curr->short_name) {
+            if (curr->short_name && curr->long_name) {
                 fprintf(stream, "-%c, ", curr->short_name[0]);
                 cur_len += 4;
+            } else if (curr->short_name) {
+                fprintf(stream, "-%c ", curr->short_name[0]);
+                cur_len += 3;
             }
 
-            fprintf(stream, "--%s", curr->long_name);
-            cur_len += strlen(curr->long_name) + 2;
+            if (curr->long_name) {
+                fprintf(stream, "--%s ", curr->long_name);
+                cur_len += strlen(curr->long_name) + 3;
+            }
 
             if (curr->argument) {
-                fprintf(stream, " %s", curr->argument);
+                fprintf(stream, "%s ", curr->argument);
                 cur_len += strlen(curr->argument) + 1;
             }
 
-            int pad = max_flag_len - cur_len + 1;
+            int pad = max_flag_len - cur_len;
 
             fprintf(stream, "%*s%s\n", pad, "", curr->description);
 
@@ -366,12 +375,12 @@ CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const cha
 {
     if (cargs_state.parsed) cargs__panic("arguments already parsed");
     if (cargs_state.flags_allocated >= CARGS_MAX_FLAGS) cargs__panic("too many flags, define bigger CARGS_MAX_FLAGS");
-    if (long_name == NULL) cargs__panic("flag long_name cannot be NULL");
-    if (!isalnum(long_name[0])) cargs__panic("flag long_name must start with an alphanumeric character");
+    if (long_name == NULL && short_name == NULL) cargs__panic("flag long_name and short_name cannot both be NULL");
+    if (long_name && !isalnum(long_name[0])) cargs__panic("flag long_name must start with an alphanumeric character");
     if (short_name && strlen(short_name) != 1) cargs__panic("flag short_name must be a single character");
     if (short_name && !isalnum(short_name[0])) cargs__panic("flag short_name must be alphanumeric");
     if (description == NULL) cargs__panic("flag description cannot be NULL");
-    if (short_name && strlen(long_name) == 1 && long_name[0] == short_name[0]) cargs__panic("flag long_name and short_name cannot be the same");
+    if (long_name && short_name && strlen(long_name) == 1 && long_name[0] == short_name[0]) cargs__panic("flag long_name and short_name cannot be the same");
 
     if (cargs_state.current_subcommand != NULL) {
         // check for duplicate flag names in current scope
@@ -414,8 +423,10 @@ CARGSDEF void cargs__panic_func(const char *file, int line, const char *message,
 CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, const char *short_name)
 {
     while (head != NULL) {
-        if (strcmp(head->long_name, long_name) == 0) cargs__panic("duplicate flag name: %s", long_name);
-        if (short_name && head->short_name == short_name) cargs__panic("duplicate flag name: %c", short_name[0]);
+        if (long_name  && head->long_name  && strcmp(head->long_name, long_name) == 0) cargs__panic("duplicate flag name: %s", long_name);
+        if (short_name && head->short_name && head->short_name[0] == short_name[0]) cargs__panic("duplicate flag name: %c", short_name[0]);
+        if (long_name  && head->short_name && head->short_name[0] == long_name[0]) cargs__panic("duplicate flag name: %s", long_name);
+        if (short_name && head->long_name  && head->long_name[0]  == short_name[0]) cargs__panic("duplicate flag name: %c", short_name[0]);
         head = head->next;
     }
 }
