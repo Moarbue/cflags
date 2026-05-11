@@ -1,5 +1,6 @@
 #define CARGS_MAX_FLAGS 20
 #define CARGS_MAX_SUBCOMMANDS 10
+#define CARGS_MAX_POSITIONALS 10
 #define CARGS_IMPLEMENTATION
 #include "cargs.h"
 
@@ -27,8 +28,10 @@ int main(int argc, char *argv[])
 
     bool clone_verbose, clone_help;
     const char *clone_branch;
+    const char *clone_url;
 
     cargs_subcommand_start("clone", "Clone a repository into a new directory");
+        cargs_positional("url", &clone_url, "The repository to clone");
         cargs_bool("help", "h", &clone_help, false, NULL, NULL, "Print clone help");
         cargs_bool("verbose", "V", &clone_verbose, false, NULL, NULL, "Clone verbosely");
         cargs_string("branch", "b", &clone_branch, "main", "<branch>", NULL, "Target branch");
@@ -42,7 +45,12 @@ int main(int argc, char *argv[])
         bool remote_add_help;
         const char *remote_add_tags;
         const char *remote_add_branch;
+        const char *remote_add_name;
+        const char *remote_add_url;
+
         cargs_subcommand_start("add", "Add a new remote repository");
+            cargs_positional("name", &remote_add_name, "Short name of the new remote");
+            cargs_positional("url", &remote_add_url, "Remote repository URL");
             cargs_bool("help", "h", &remote_add_help, false, NULL, NULL, "Print remote add help");
             cargs_string("tags", "t", &remote_add_tags, NULL, "<tags>", NULL, "Tags to attach");
             cargs_string("branch", "b", &remote_add_branch, "main", "<branch>", NULL, "Upstream branch");
@@ -78,22 +86,14 @@ int main(int argc, char *argv[])
             cargs_print_help(stdout, active_cmd);
             return 0;
         }
-        if (pos_idx >= argc) {
-            fprintf(stderr, "Error: 'clone' requires a <url> positional argument.\n");
-            return 1;
-        }
-        exec_clone(clone_verbose, clone_branch, argv[pos_idx]);
+        exec_clone(clone_verbose, clone_branch, clone_url);
     }
     else if (strcmp(active_cmd->name, "add") == 0 && active_cmd->parent && strcmp(active_cmd->parent->name, "remote") == 0) {
         if (remote_add_help) {
             cargs_print_help(stdout, active_cmd);
             return 0;
         }
-        if (pos_idx + 1 >= argc) {
-            fprintf(stderr, "Error: 'remote add' requires <name> and <url> positional arguments.\n");
-            return 1;
-        }
-        exec_remote_add(argv[pos_idx], argv[pos_idx + 1], remote_add_branch, remote_add_tags);
+        exec_remote_add(remote_add_name, remote_add_url, remote_add_branch, remote_add_tags);
     }
     else if (strcmp(active_cmd->name, "remote") == 0) {
         if (remote_help) {
