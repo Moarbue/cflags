@@ -76,7 +76,7 @@ CARGSDEF void cargs_uint(const char *long_name, const char *short_name, unsigned
 CARGSDEF void cargs_bool(const char *long_name, const char *short_name, bool *reference, const bool default_value, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs_float(const char *long_name, const char *short_name, float *reference, const float default_value, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs_char(const char *long_name, const char *short_name, char *reference, const char default_value, const char *argument, validation_func_t *validation_func, const char *description);
-CARGSDEF void cargs_string(const char *long_name, const char *short_name, char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_string(const char *long_name, const char *short_name, const char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description);
 
 CARGSDEF void cargs_subcommand_start(const char *name, const char *description);
 CARGSDEF void cargs_subcommand_end(void);
@@ -194,7 +194,12 @@ CARGS_FLAG(CARGS_FLAG_TYPE_UINT, uint, unsigned int)
 CARGS_FLAG(CARGS_FLAG_TYPE_BOOL, bool, bool)
 CARGS_FLAG(CARGS_FLAG_TYPE_FLOAT, float, float)
 CARGS_FLAG(CARGS_FLAG_TYPE_CHAR, char, char)
-CARGS_FLAG(CARGS_FLAG_TYPE_STRING, string, char *)
+CARGSDEF void cargs_string(const char *long_name, const char *short_name, const char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description)
+{
+    struct cargs_flag *flag = cargs__new_flag(CARGS_FLAG_TYPE_STRING, long_name, short_name, argument, validation_func, description);
+    flag->reference = reference;
+    *reference = default_value;
+}
 
 CARGSDEF void cargs_subcommand_start(const char *name, const char *description)
 {
