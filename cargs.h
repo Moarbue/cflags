@@ -70,7 +70,11 @@ typedef enum {
     CARGS_INVALID_BOOL,
     CARGS_INVALID_INT,
     CARGS_INVALID_UINT,
+    CARGS_INVALID_INT64,
+    CARGS_INVALID_UINT64,
+    CARGS_INVALID_SIZE,
     CARGS_INVALID_FLOAT,
+    CARGS_INVALID_DOUBLE,
     CARGS_INVALID_CHAR,
     CARGS_POSITIONAL_STARTS_WITH_DASH,
 } cargs_error;
@@ -78,8 +82,12 @@ typedef enum {
 
 CARGSDEF void cargs_int(const char *long_name, const char *short_name, int *reference, const int default_value, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs_uint(const char *long_name, const char *short_name, unsigned int *reference, const unsigned int default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_int64(const char *long_name, const char *short_name, int64_t *reference, const int64_t default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_uint64(const char *long_name, const char *short_name, uint64_t *reference, const uint64_t default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_size(const char *long_name, const char *short_name, size_t *reference, const size_t default_value, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs_bool(const char *long_name, const char *short_name, bool *reference, const bool default_value, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs_float(const char *long_name, const char *short_name, float *reference, const float default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_double(const char *long_name, const char *short_name, double *reference, const double default_value, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs_char(const char *long_name, const char *short_name, char *reference, const char default_value, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs_string(const char *long_name, const char *short_name, const char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description);
 
@@ -117,8 +125,12 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd);
 enum cargs_flag_type {
     CARGS_FLAG_TYPE_INT,
     CARGS_FLAG_TYPE_UINT,
+    CARGS_FLAG_TYPE_INT64,
+    CARGS_FLAG_TYPE_UINT64,
+    CARGS_FLAG_TYPE_SIZE,
     CARGS_FLAG_TYPE_BOOL,
     CARGS_FLAG_TYPE_FLOAT,
+    CARGS_FLAG_TYPE_DOUBLE,
     CARGS_FLAG_TYPE_CHAR,
     CARGS_FLAG_TYPE_STRING,
 };
@@ -212,8 +224,12 @@ CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positiona
 
 CARGS_FLAG(CARGS_FLAG_TYPE_INT, int, int)
 CARGS_FLAG(CARGS_FLAG_TYPE_UINT, uint, unsigned int)
+CARGS_FLAG(CARGS_FLAG_TYPE_INT64, int64, int64_t)
+CARGS_FLAG(CARGS_FLAG_TYPE_UINT64, uint64, uint64_t)
+CARGS_FLAG(CARGS_FLAG_TYPE_SIZE, size, size_t)
 CARGS_FLAG(CARGS_FLAG_TYPE_BOOL, bool, bool)
 CARGS_FLAG(CARGS_FLAG_TYPE_FLOAT, float, float)
+CARGS_FLAG(CARGS_FLAG_TYPE_DOUBLE, double, double)
 CARGS_FLAG(CARGS_FLAG_TYPE_CHAR, char, char)
 CARGSDEF void cargs_string(const char *long_name, const char *short_name, const char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description)
 {
@@ -695,22 +711,26 @@ CARGSDEF bool cargs__find_short_flag(struct cargs_flag *head, char short_name, s
 
 CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token)
 {
-    if (flag->type == CARGS_FLAG_TYPE_BOOL) {
-        if (strcmp(token, "true") == 0 || strcmp(token, "1") == 0) {
-            *(bool*)flag->reference = true;
-        } else if (strcmp(token, "false") == 0 || strcmp(token, "0") == 0) {
-            *(bool*)flag->reference = false;
-        } else {
-            cargs_set_error(CARGS_INVALID_BOOL, "invalid boolean value '%s' for --%s", token, flag->long_name ? flag->long_name : flag->short_name);
-            return false;
+    const char *name = flag->long_name ? flag->long_name : flag->short_name;
+    char *endptr;
+
+    switch (flag->type) {
+        case CARGS_FLAG_TYPE_BOOL: {
+            if (strcmp(token, "true") == 0 || strcmp(token, "1") == 0) {
+                *(bool*)flag->reference = true;
+            } else if (strcmp(token, "false") == 0 || strcmp(token, "0") == 0) {
+                *(bool*)flag->reference = false;
+            } else {
+                cargs_set_error(CARGS_INVALID_BOOL, "invalid boolean value '%s' for --%s", token, name);
+                return false;
+            }
+            break;
         }
-    } else if (flag->type == CARGS_FLAG_TYPE_INT || flag->type == CARGS_FLAG_TYPE_UINT || flag->type == CARGS_FLAG_TYPE_FLOAT) {
-        char *endptr;
-        if (flag->type == CARGS_FLAG_TYPE_INT) {
+        case CARGS_FLAG_TYPE_INT: {
             errno = 0;
             long val = strtol(token, &endptr, 0);
             if (endptr == token || *endptr != '\0') {
-                cargs_set_error(CARGS_INVALID_INT, "invalid integer '%s' for --%s", token, flag->long_name ? flag->long_name : flag->short_name);
+                cargs_set_error(CARGS_INVALID_INT, "invalid integer '%s' for --%s", token, name);
                 return false;
             }
             if (val > INT_MAX || val < INT_MIN || errno == ERANGE) {
@@ -718,14 +738,15 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
                 return false;
             }
             *(int*)flag->reference = (int)val;
-        } else if (flag->type == CARGS_FLAG_TYPE_UINT) {
+            break;
+        }
+        case CARGS_FLAG_TYPE_UINT: {
             errno = 0;
             unsigned long val = strtoul(token, &endptr, 0);
             if (endptr == token || *endptr != '\0') {
                 cargs_set_error(CARGS_INVALID_UINT, "invalid unsigned integer '%s'", token);
                 return false;
             }
-            // Add prefix check for negative numbers
             const char *check_neg = token;
             while (isspace((unsigned char)*check_neg)) check_neg++;
             if (*check_neg == '-') {
@@ -737,7 +758,43 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
                 return false;
             }
             *(unsigned int*)flag->reference = (unsigned int)val;
-        } else { // float
+            break;
+        }
+        case CARGS_FLAG_TYPE_INT64: {
+            errno = 0;
+            long long val = strtoll(token, &endptr, 0);
+            if (endptr == token || *endptr != '\0') {
+                cargs_set_error(CARGS_INVALID_INT64, "invalid 64-bit integer '%s'", token);
+                return false;
+            }
+            if (errno == ERANGE) {
+                cargs_set_error(CARGS_INVALID_INT64, "64-bit integer out of range '%s'", token);
+                return false;
+            }
+            *(int64_t*)flag->reference = (int64_t)val;
+            break;
+        }
+        case CARGS_FLAG_TYPE_UINT64: {
+            errno = 0;
+            unsigned long long val = strtoull(token, &endptr, 0);
+            if (endptr == token || *endptr != '\0') {
+                cargs_set_error(CARGS_INVALID_UINT64, "invalid 64-bit unsigned integer '%s'", token);
+                return false;
+            }
+            const char *check_neg = token;
+            while (isspace((unsigned char)*check_neg)) check_neg++;
+            if (*check_neg == '-') {
+                cargs_set_error(CARGS_INVALID_UINT64, "unsigned integer cannot be negative '%s'", token);
+                return false;
+            }
+            if (errno == ERANGE) {
+                cargs_set_error(CARGS_INVALID_UINT64, "64-bit unsigned integer out of range '%s'", token);
+                return false;
+            }
+            *(uint64_t*)flag->reference = (uint64_t)val;
+            break;
+        }
+        case CARGS_FLAG_TYPE_FLOAT: {
             errno = 0;
             float val = strtof(token, &endptr);
             if (endptr == token || *endptr != '\0') {
@@ -749,24 +806,74 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
                 return false;
             }
             *(float*)flag->reference = val;
+            break;
         }
-    } else if (flag->type == CARGS_FLAG_TYPE_CHAR) {
-        if (strlen(token) != 1) {
-            cargs_set_error(CARGS_INVALID_CHAR, "expected single character for --%s, got '%s'", flag->long_name ? flag->long_name : flag->short_name, token);
+        case CARGS_FLAG_TYPE_DOUBLE: {
+            errno = 0;
+            double val = strtod(token, &endptr);
+            if (endptr == token || *endptr != '\0') {
+                cargs_set_error(CARGS_INVALID_DOUBLE, "invalid double '%s'", token);
+                return false;
+            }
+            if (errno == ERANGE) {
+                cargs_set_error(CARGS_INVALID_DOUBLE, "double out of range '%s'", token);
+                return false;
+            }
+            *(double*)flag->reference = val;
+            break;
+        }
+        case CARGS_FLAG_TYPE_SIZE: {
+            errno = 0;
+            double val = strtod(token, &endptr);
+            if (endptr == token && *endptr != '\0') {
+                cargs_set_error(CARGS_INVALID_SIZE, "invalid size multiplier '%s'", token);
+                return false;
+            }
+            if (errno == ERANGE || val < 0) {
+                cargs_set_error(CARGS_INVALID_SIZE, "size multiplier out of bounds '%s'", token);
+                return false;
+            }
+
+            size_t multiplier = 1;
+            if (*endptr != '\0') {
+                char suffix = toupper((unsigned char)*endptr);
+                if (suffix == 'K') multiplier = 1024ULL;
+                else if (suffix == 'M') multiplier = 1024ULL * 1024ULL;
+                else if (suffix == 'G') multiplier = 1024ULL * 1024ULL * 1024ULL;
+                else if (suffix == 'T') multiplier = 1024ULL * 1024ULL * 1024ULL * 1024ULL;
+                else {
+                    cargs_set_error(CARGS_INVALID_SIZE, "unknown size suffix '%c' in '%s'", suffix, token);
+                    return false;
+                }
+                if (*(endptr + 1) == 'B' || *(endptr + 1) == 'b') endptr++;
+                if (*(endptr + 1) != '\0') {
+                    cargs_set_error(CARGS_INVALID_SIZE, "trailing characters after size suffix '%s'", token);
+                    return false;
+                }
+            }
+            *(size_t*)flag->reference = (size_t)(val * multiplier);
+            break;
+        }
+        case CARGS_FLAG_TYPE_CHAR: {
+            if (strlen(token) != 1) {
+                cargs_set_error(CARGS_INVALID_CHAR, "expected single character for --%s, got '%s'", name, token);
+                return false;
+            }
+            *(char*)flag->reference = token[0];
+            break;
+        }
+        case CARGS_FLAG_TYPE_STRING: {
+            *(const char**)flag->reference = token;
+            break;
+        }
+        default:
             return false;
-        }
-        *(char*)flag->reference = token[0];
-    } else if (flag->type == CARGS_FLAG_TYPE_STRING) {
-        *(const char**)flag->reference = token;
     }
 
-    if (flag->validation_func) {
-        const char *name = flag->long_name ? flag->long_name : flag->short_name;
-        if (!flag->validation_func(name, token)) {
-            // validation_func should have set error via cargs_set_error
-            return false;
-        }
+    if (flag->validation_func && !flag->validation_func(name, token)) {
+        return false;
     }
+
     return true;
 }
 
