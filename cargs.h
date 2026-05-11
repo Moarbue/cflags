@@ -76,6 +76,7 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd);
 
 #include <ctype.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
