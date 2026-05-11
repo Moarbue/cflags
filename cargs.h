@@ -26,6 +26,10 @@ SOFTWARE.
 #ifndef CARGS_H
 #define CARGS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef CARGS_MAX_FLAGS
 #   error "CARGS_MAX_FLAGS not defined"
 #endif
@@ -109,6 +113,9 @@ CARGSDEF struct cargs_subcommand *cargs_get_active_subcommand(void);
 CARGSDEF struct cargs_subcommand *cargs_get_subcommand(struct cargs_subcommand *parent, const char *name);
 CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CARGS_H
 
