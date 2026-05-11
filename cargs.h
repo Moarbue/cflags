@@ -436,8 +436,25 @@ CARGSDEF int cargs_parse(int argc, char **argv)
         }
     }
 
+    int current_pos_idx = positional_mode ? first_positional : argc;
+    struct cargs_positional *expected_pos = *cargs__get_active_positionals_head();
+
+    while (expected_pos != NULL) {
+        if (current_pos_idx >= argc) {
+            cargs_set_error(CARGS_MISSING_POSITIONAL, "missing mandatory argument <%s>", expected_pos->name);
+            return -1;
+        }
+
+        if (expected_pos->reference) {
+            *(expected_pos->reference) = argv[current_pos_idx];
+        }
+
+        current_pos_idx++;
+        expected_pos = expected_pos->next;
+    }
+
     cargs_state.parsed = true;
-    return positional_mode ? first_positional : argc;
+    return current_pos_idx;
 }
 
 CARGSDEF void cargs_reset(void)
