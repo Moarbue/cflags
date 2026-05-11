@@ -474,6 +474,7 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd)
 
         for (int i = depth - 1; i >= 0; i--) {
             size_t p_len = strlen(prefix);
+            if (p_len >= sizeof(prefix) - 1) break;
             snprintf(prefix + p_len, sizeof(prefix) - p_len, " %s", chain[i]->name);
         }
     }
