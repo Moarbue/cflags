@@ -11,8 +11,8 @@ A robust, POSIX-compliant, single-header command-line argument parsing library f
 * **POSIX/GNU Syntax:** Supports `--flag=value`, `--flag value`, `-f value`, inline clusters `-abc`, inline assignment `-fValue`, and `--` positional termination.
 * **Subcommand FSM:** Define isolated argument scopes for nested execution trees (e.g., `cmd remote add --tags=stable`).
 * **Automatic Positional Mapping:** Securely bind mandatory positional arguments without manual `argc` index bounds checking.
-* **Primitive Type Parsing:** Native resolution for `bool`, `int`, `unsigned int`, `float`, `char`, and `string`.
-* **Safety & Validation:** Prevents negative integer wraparound, catches 32-bit/64-bit overflow out-of-bounds, and supports custom validation callback injection.
+* **Extended Type Parsing:** Native resolution for `bool`, `int`, `unsigned int`, `int64_t`, `uint64_t`, `float`, `double`, `char`, `string`, and `size_t` (e.g., `1.5M`, `2G`).
+* **Safety & Validation:** Prevents negative integer wraparound, catches overflow out-of-bounds, and supports custom validation callback injection.
 
 ## Integration
 
@@ -110,7 +110,11 @@ Flags must be defined before calling `cargs_parse`. Scoping is determined by the
 void cargs_bool(const char *long_name, const char *short_name, bool *reference, const bool default_value, const char *argument, validation_func_t *validation_func, const char *description);
 void cargs_int(const char *long_name, const char *short_name, int *reference, const int default_value, const char *argument, validation_func_t *validation_func, const char *description);
 void cargs_uint(const char *long_name, const char *short_name, unsigned int *reference, const unsigned int default_value, const char *argument, validation_func_t *validation_func, const char *description);
+void cargs_int64(const char *long_name, const char *short_name, int64_t *reference, const int64_t default_value, const char *argument, validation_func_t *validation_func, const char *description);
+void cargs_uint64(const char *long_name, const char *short_name, uint64_t *reference, const uint64_t default_value, const char *argument, validation_func_t *validation_func, const char *description);
+void cargs_size(const char *long_name, const char *short_name, size_t *reference, const size_t default_value, const char *argument, validation_func_t *validation_func, const char *description);
 void cargs_float(const char *long_name, const char *short_name, float *reference, const float default_value, const char *argument, validation_func_t *validation_func, const char *description);
+void cargs_double(const char *long_name, const char *short_name, double *reference, const double default_value, const char *argument, validation_func_t *validation_func, const char *description);
 void cargs_char(const char *long_name, const char *short_name, char *reference, const char default_value, const char *argument, validation_func_t *validation_func, const char *description);
 void cargs_string(const char *long_name, const char *short_name, const char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description);
 
@@ -177,7 +181,11 @@ Evaluate `cargs_get_error()` against the following enum if `cargs_parse` returns
 * `CARGS_INVALID_BOOL`
 * `CARGS_INVALID_INT`
 * `CARGS_INVALID_UINT`
+* `CARGS_INVALID_INT64`
+* `CARGS_INVALID_UINT64`
 * `CARGS_INVALID_FLOAT`
+* `CARGS_INVALID_DOUBLE`
+* `CARGS_INVALID_SIZE`
 * `CARGS_INVALID_CHAR`
 * `CARGS_INVALID_ARGUMENT` (Triggered by custom validation callback)
 * `CARGS_POSITIONAL_STARTS_WITH_DASH`
