@@ -75,6 +75,7 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd);
 #ifdef CARGS_IMPLEMENTATION
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -693,9 +694,14 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
             }
             *(unsigned int*)flag->reference = (unsigned int)val;
         } else { // float
+            errno = 0;
             float val = strtof(token, &endptr);
             if (endptr == token || *endptr != '\0') {
                 cargs_set_error(CARGS_INVALID_FLOAT, "invalid float '%s'", token);
+                return false;
+            }
+            if (errno == ERANGE) {
+                cargs_set_error(CARGS_INVALID_FLOAT, "float out of range '%s'", token);
                 return false;
             }
             *(float*)flag->reference = val;
