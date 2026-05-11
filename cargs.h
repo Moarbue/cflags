@@ -36,6 +36,13 @@ typedef enum {
     CARGS_MISSING_ARGUMENT,
     CARGS_UNKNOWN_FLAG,
     CARGS_UNKNOWN_SUBCOMMAND,
+    CARGS_UNEXPECTED_ARGUMENT,
+    CARGS_INVALID_BOOL,
+    CARGS_INVALID_INT,
+    CARGS_INVALID_UINT,
+    CARGS_INVALID_FLOAT,
+    CARGS_INVALID_CHAR,
+    CARGS_POSITIONAL_STARTS_WITH_DASH,
 } cargs_error;
 
 
@@ -71,6 +78,7 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd);
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 enum cargs_flag_type {
     CARGS_FLAG_TYPE_INT,
@@ -125,6 +133,9 @@ CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const cha
 CARGSDEF void cargs__panic_func(const char *file, int line, const char *message, ...);
 #define cargs__panic(message, ...) cargs__panic_func(__FILE__, __LINE__, message, ##__VA_ARGS__)
 CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, const char *short_name);
+CARGSDEF bool cargs__find_and_set_subcommand(struct cargs_subcommand *head, const char *name, struct cargs_subcommand **cmd);
+CARGSDEF bool cargs__find_and_set_flag(struct cargs_flag *head, const char *name, struct cargs_flag **flag);
+CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token);
 
 #define CARGS_FLAG(enum_type, function_suffix, type_identifier) \
     void cargs_##function_suffix(const char *long_name, const char *short_name, type_identifier *reference, const type_identifier default_value, const char *argument, validation_func_t *validation_func, const char *description) \
@@ -232,15 +243,197 @@ CARGSDEF void cargs_set_program_description(const char *description)
 
 CARGSDEF int cargs_parse(int argc, char **argv)
 {
+    if (argc == 0 || argv == NULL) cargs__panic("no arguments to parse, check argc/argv");
     if (cargs_state.parsed) cargs__panic("arguments already parsed");
-    if (cargs_state.current_subcommand != NULL) cargs__panic("unterminated subcommand");
+    if (cargs_state.current_subcommand != NULL) cargs__panic("unterminated subcommand '%s'", cargs_state.current_subcommand->name);
+
+    enum CARGS_PARSE_STATE {
+        STATE_FETCH_TOKEN,
+        STATE_CLASSIFY_TOKEN,
+        STATE_EVALUATE_LONG_FLAG,
+        STATE_EVALUATE_SHORT_CLUSTER,
+        STATE_POSITIONAL_FETCH_CHECK,
+        STATE_GET_FLAG_VALUE,
+        STATE_EVALUATE_FLAG_VALUE,
+        STATE_PARSING_COMPLETE,
+    };
+    enum CARGS_PARSE_STATE state = STATE_FETCH_TOKEN;
+
+    int index = 1; // skip program name
+    cargs_state.program_name = argv[0];
+
+    char *token;
+    struct cargs_flag *flag = NULL; // currently processed flag
+    int first_positional = -1;
+    bool positional_mode = false;
+
+    while (state != STATE_PARSING_COMPLETE) {
+        switch (state) {
+            case STATE_FETCH_TOKEN: {
+                if (index >= argc) {
+                    state = STATE_PARSING_COMPLETE;
+                    break;
+                }
+                token = argv[index++];
+                state = STATE_CLASSIFY_TOKEN;
+                break;
+            }
+            case STATE_CLASSIFY_TOKEN: {
+                if (strcmp(token, "--") == 0) {
+                    // Everything after '--' is positional, no validation needed
+                    first_positional = index;
+                    positional_mode = true;
+                    index = argc; // skip remaining tokens
+                    break;
+                } else if (strncmp(token, "--", 2) == 0) {
+                    state = STATE_EVALUATE_LONG_FLAG;
+                } else if (token[0] == '-' && strlen(token) > 1) {
+                    state = STATE_EVALUATE_SHORT_CLUSTER;
+                } else {
+                    // Check for subcommand
+                    struct cargs_subcommand *subcmd = NULL;
+                    struct cargs_subcommand *head = cargs_state.current_subcommand ?
+                        cargs_state.current_subcommand->children_head :
+                        cargs_state.root_subcommands_head;
+                    if (cargs__find_and_set_subcommand(head, token, &subcmd)) {
+                        cargs_state.current_subcommand = subcmd;
+                        state = STATE_FETCH_TOKEN;
+                    } else {
+                        // This is the first positional argument
+                        if (token[0] == '-') {
+                            cargs_set_error(CARGS_POSITIONAL_STARTS_WITH_DASH, "unexpected option '%s'", token);
+                            return -1;
+                        }
+                        first_positional = (index - 1);
+                        positional_mode = true;
+                        state = STATE_POSITIONAL_FETCH_CHECK;
+                    }
+                }
+                break;
+            }
+            case STATE_EVALUATE_LONG_FLAG: {
+                token += 2; // skip "--"
+                char *equal_sign = strchr(token, '=');
+                if (equal_sign != NULL) *equal_sign = '\0';
+
+                // Look up flag in current scope (global or subcommand)
+                struct cargs_flag **flag_head = cargs_state.current_subcommand ?
+                    &cargs_state.current_subcommand->flags_head :
+                    &cargs_state.global_flags_head;
+                if (!cargs__find_and_set_flag(*flag_head, token, &flag)) {
+                    cargs_set_error(CARGS_UNKNOWN_FLAG, "unknown flag: --%s", token);
+                    return -1;
+                }
+
+                if (equal_sign != NULL) {
+                    if (flag->argument == NULL) {
+                        cargs_set_error(CARGS_UNEXPECTED_ARGUMENT, "flag --%s does not take an argument", flag->long_name);
+                        return -1;
+                    }
+                    token = equal_sign + 1;
+                    state = STATE_EVALUATE_FLAG_VALUE;
+                } else {
+                    if (flag->argument != NULL) {
+                        state = STATE_GET_FLAG_VALUE;
+                    } else {
+                        // Boolean flag (or any without argument) set to true
+                        if (flag->type == CARGS_FLAG_TYPE_BOOL) {
+                            *(bool*)flag->reference = true;
+                        }
+                        state = STATE_FETCH_TOKEN;
+                    }
+                }
+                break;
+            }
+            case STATE_EVALUATE_SHORT_CLUSTER: {
+                const char *p = token + 1; // skip '-'
+                while (*p != '\0') {
+                    char sname[2] = { *p, '\0' };
+                    struct cargs_flag *sflag = NULL;
+                    struct cargs_flag *head = cargs_state.current_subcommand ?
+                        cargs_state.current_subcommand->flags_head :
+                        cargs_state.global_flags_head;
+                    if (!cargs__find_and_set_flag(head, sname, &sflag)) {
+                        cargs_set_error(CARGS_UNKNOWN_FLAG, "unknown flag: -%c", *p);
+                        return -1;
+                    }
+
+                    if (sflag->argument != NULL) {
+                        // Flag requires an argument
+                        if (*(p + 1) != '\0') {
+                            // Rest of cluster is its argument
+                            if (!cargs__parse_flag_value(sflag, p + 1)) return -1;
+                            p += strlen(p); // skip the rest
+                        } else {
+                            // Last char – next token is the argument
+                            flag = sflag;
+                            state = STATE_GET_FLAG_VALUE;
+                            // We must exit this case; the while loop will break
+                            goto finish_cluster;
+                        }
+                    } else {
+                        // No argument – set boolean true (or whatever the default)
+                        if (sflag->type == CARGS_FLAG_TYPE_BOOL) {
+                            *(bool*)sflag->reference = true;
+                        }
+                        p++;
+                    }
+                }
+                finish_cluster:
+                if (state == STATE_EVALUATE_SHORT_CLUSTER) // not changed inside loop
+                    state = STATE_FETCH_TOKEN;
+                break;
+            }
+            case STATE_POSITIONAL_FETCH_CHECK: {
+                // Continue checking remaining positionals
+                while (index < argc) {
+                    token = argv[index];
+                    if (token[0] == '-') {
+                        cargs_set_error(CARGS_POSITIONAL_STARTS_WITH_DASH, "unexpected option '%s'", token);
+                        return -1;
+                    }
+                    index++;
+                }
+                // All done
+                break;
+            }
+            case STATE_GET_FLAG_VALUE: {
+                if (index >= argc) {
+                    cargs_set_error(CARGS_MISSING_ARGUMENT, "missing argument for --%s",
+                                    flag->long_name ? flag->long_name : flag->short_name);
+                    return -1;
+                }
+                token = argv[index++];
+                state = STATE_EVALUATE_FLAG_VALUE;
+                break;
+            }
+            case STATE_EVALUATE_FLAG_VALUE: {
+                if (!cargs__parse_flag_value(flag, token)) return -1;
+                state = STATE_FETCH_TOKEN;
+                break;
+            }
+            case STATE_PARSING_COMPLETE:
+            default:
+                break;
+        }
+    }
 
     cargs_state.parsed = true;
-    return -1;
+    return positional_mode ? first_positional : argc;
 }
 
 CARGSDEF void cargs_reset(void)
 {
+    // Simple reset: clear all flags/subcommands, reuse static pools
+    cargs_state.global_flags_head = NULL;
+    cargs_state.root_subcommands_head = NULL;
+    cargs_state.current_subcommand = NULL;
+    cargs_state.flags_allocated = 0;
+    cargs_state.subcommands_allocated = 0;
+    cargs_state.error = CARGS_OK;
+    cargs_state.error_message[0] = '\0';
+    cargs_state.parsed = false;
+    // program_name and program_description can persist (or reset if desired)
 }
 
 CARGSDEF struct cargs_subcommand *cargs_get_active_subcommand(void)
@@ -260,12 +453,11 @@ CARGSDEF struct cargs_subcommand *cargs_get_subcommand(struct cargs_subcommand *
     }
 
     cargs__panic("subcommand '%s' not found", name);
+    return NULL; // suppress compiler warning
 }
 
 CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd)
 {
-    if (!cargs_state.parsed) cargs__panic("arguments not parsed");
-
     char prefix[512] = {0};
     snprintf(prefix, sizeof (prefix), "%s", cargs_state.program_name);
 
@@ -376,7 +568,9 @@ CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const cha
     if (cargs_state.parsed) cargs__panic("arguments already parsed");
     if (cargs_state.flags_allocated >= CARGS_MAX_FLAGS) cargs__panic("too many flags, define bigger CARGS_MAX_FLAGS");
     if (long_name == NULL && short_name == NULL) cargs__panic("flag long_name and short_name cannot both be NULL");
-    if (long_name && !isalnum(long_name[0])) cargs__panic("flag long_name must start with an alphanumeric character");
+    if (long_name)
+        for (size_t i = 0; i < strlen(long_name); i++)
+            if (!isalnum(long_name[i])) cargs__panic("flag long_name can only contain alphanumeric characters");
     if (short_name && strlen(short_name) != 1) cargs__panic("flag short_name must be a single character");
     if (short_name && !isalnum(short_name[0])) cargs__panic("flag short_name must be alphanumeric");
     if (description == NULL) cargs__panic("flag description cannot be NULL");
@@ -429,6 +623,99 @@ CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *
         if (short_name && head->long_name  && head->long_name[0]  == short_name[0]) cargs__panic("duplicate flag name: %c", short_name[0]);
         head = head->next;
     }
+}
+
+CARGSDEF bool cargs__find_and_set_subcommand(struct cargs_subcommand *head, const char *name, struct cargs_subcommand **cmd)
+{
+    struct cargs_subcommand *curr = head;
+    while (curr != NULL) {
+        if (strcmp(curr->name, name) == 0) {
+            *cmd = curr;
+            return true;
+        }
+        curr = curr->next;
+    }
+    return false;
+}
+
+CARGSDEF bool cargs__find_and_set_flag(struct cargs_flag *head, const char *name, struct cargs_flag **flag)
+{
+    struct cargs_flag *curr = head;
+    while (curr != NULL) {
+        if (curr->long_name && strcmp(curr->long_name, name) == 0) {
+            *flag = curr;
+            return true;
+        }
+        if (curr->short_name && strcmp(curr->short_name, name) == 0) {
+            *flag = curr;
+            return true;
+        }
+        curr = curr->next;
+    }
+    return false;
+}
+
+CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token)
+{
+    if (flag->type == CARGS_FLAG_TYPE_BOOL) {
+        if (strcmp(token, "true") == 0 || strcmp(token, "1") == 0) {
+            *(bool*)flag->reference = true;
+        } else if (strcmp(token, "false") == 0 || strcmp(token, "0") == 0) {
+            *(bool*)flag->reference = false;
+        } else {
+            cargs_set_error(CARGS_INVALID_BOOL, "invalid boolean value '%s' for --%s", token, flag->long_name ? flag->long_name : flag->short_name);
+            return false;
+        }
+    } else if (flag->type == CARGS_FLAG_TYPE_INT || flag->type == CARGS_FLAG_TYPE_UINT || flag->type == CARGS_FLAG_TYPE_FLOAT) {
+        char *endptr;
+        if (flag->type == CARGS_FLAG_TYPE_INT) {
+            long val = strtol(token, &endptr, 0);
+            if (endptr == token || *endptr != '\0') {
+                cargs_set_error(CARGS_INVALID_INT, "invalid integer '%s' for --%s", token, flag->long_name ? flag->long_name : flag->short_name);
+                return false;
+            }
+            if (val > INT_MAX || val < INT_MIN) {
+                cargs_set_error(CARGS_INVALID_INT, "integer out of range '%s'", token);
+                return false;
+            }
+            *(int*)flag->reference = (int)val;
+        } else if (flag->type == CARGS_FLAG_TYPE_UINT) {
+            unsigned long val = strtoul(token, &endptr, 0);
+            if (endptr == token || *endptr != '\0') {
+                cargs_set_error(CARGS_INVALID_UINT, "invalid unsigned integer '%s'", token);
+                return false;
+            }
+            if (val > UINT_MAX) {
+                cargs_set_error(CARGS_INVALID_UINT, "unsigned integer out of range '%s'", token);
+                return false;
+            }
+            *(unsigned int*)flag->reference = (unsigned int)val;
+        } else { // float
+            float val = strtof(token, &endptr);
+            if (endptr == token || *endptr != '\0') {
+                cargs_set_error(CARGS_INVALID_FLOAT, "invalid float '%s'", token);
+                return false;
+            }
+            *(float*)flag->reference = val;
+        }
+    } else if (flag->type == CARGS_FLAG_TYPE_CHAR) {
+        if (strlen(token) != 1) {
+            cargs_set_error(CARGS_INVALID_CHAR, "expected single character for --%s, got '%s'", flag->long_name ? flag->long_name : flag->short_name, token);
+            return false;
+        }
+        *(char*)flag->reference = token[0];
+    } else if (flag->type == CARGS_FLAG_TYPE_STRING) {
+        *(const char**)flag->reference = token;
+    }
+
+    if (flag->validation_func) {
+        const char *name = flag->long_name ? flag->long_name : flag->short_name;
+        if (!flag->validation_func(name, token)) {
+            // validation_func should have set error via cargs_set_error
+            return false;
+        }
+    }
+    return true;
 }
 
 #endif // CARGS_IMPLEMENTATION
