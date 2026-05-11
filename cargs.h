@@ -351,14 +351,17 @@ CARGSDEF int cargs_parse(int argc, char **argv)
             }
             case STATE_POSITIONAL_FETCH_CHECK: {
                 // Continue checking remaining positionals
-                while (index < argc) {
-                    token = argv[index];
+                while (state != STATE_PARSING_COMPLETE) {
+                    if (index >= argc) {
+                        state = STATE_PARSING_COMPLETE;
+                        break;
+                    }
+                    token = argv[index++];
                     // single dash is standard Unix convention for stdin
                     if (token[0] == '-' && strlen(token) > 1) {
                         cargs_set_error(CARGS_POSITIONAL_STARTS_WITH_DASH, "unexpected option '%s'", token);
                         return -1;
                     }
-                    index++;
                 }
                 // All done
                 break;
