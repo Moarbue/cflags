@@ -118,6 +118,66 @@ TEST(type_int_unsigned)
     ASSERT_EQ_INT(CARGS_INVALID_UINT, cargs_get_error());
 }
 
+TEST(type_int64)
+{
+    cargs_reset();
+    int64_t val;
+    cargs_int64("val", NULL, &val, 0, NULL, NULL, "-");
+
+    ASSERT(PARSE_MOCK("--val=9223372036854775807") != -1, "Max int64");
+    ASSERT(val == 9223372036854775807LL, "Value match");
+
+    cargs_reset();
+    cargs_int64("val", NULL, &val, 0, NULL, NULL, "-");
+    ASSERT(PARSE_MOCK("--val=-9223372036854775807") != -1, "Min int64");
+    ASSERT(val == -9223372036854775807LL, "Value match");
+
+    cargs_reset();
+    cargs_int64("val", NULL, &val, 0, NULL, NULL, "-");
+    ASSERT(PARSE_MOCK("--val=9223372036854775808") == -1, "Max int64 overflow");
+    ASSERT_EQ_INT(CARGS_INVALID_INT64, cargs_get_error());
+}
+
+TEST(type_uint64)
+{
+    cargs_reset();
+    uint64_t val;
+    cargs_uint64("val", NULL, &val, 0, NULL, NULL, "-");
+
+    ASSERT(PARSE_MOCK("--val=18446744073709551615") != -1, "Max uint64");
+    ASSERT(val == 18446744073709551615ULL, "Value match");
+
+    cargs_reset();
+    cargs_uint64("val", NULL, &val, 0, NULL, NULL, "-");
+    ASSERT(PARSE_MOCK("--val=-1") == -1, "Invalid uint64");
+    ASSERT_EQ_INT(CARGS_INVALID_UINT64, cargs_get_error());
+}
+
+TEST(type_size)
+{
+    cargs_reset();
+    size_t val;
+    cargs_size("val", NULL, &val, 0, NULL, NULL, "-");
+
+    ASSERT(PARSE_MOCK("--val=2K") != -1, "Valid K multiplier");
+    ASSERT(val == 2048, "2K match");
+
+    cargs_reset();
+    cargs_size("val", NULL, &val, 0, NULL, NULL, "-");
+    ASSERT(PARSE_MOCK("--val=1.5M") != -1, "Valid M multiplier (float)");
+    ASSERT(val == 1572864, "1.5M match");
+
+    cargs_reset();
+    cargs_size("val", NULL, &val, 0, NULL, NULL, "-");
+    ASSERT(PARSE_MOCK("--val=1gB") != -1, "Valid G multiplier with B suffix");
+    ASSERT(val == 1073741824, "1GB match");
+
+    cargs_reset();
+    cargs_size("val", NULL, &val, 0, NULL, NULL, "-");
+    ASSERT(PARSE_MOCK("--val=5X") == -1, "Invalid suffix");
+    ASSERT_EQ_INT(CARGS_INVALID_SIZE, cargs_get_error());
+}
+
 TEST(type_float)
 {
     cargs_reset();
@@ -131,6 +191,21 @@ TEST(type_float)
     cargs_float("val", NULL, &val, 0.0f, NULL, NULL, "-");
     ASSERT(PARSE_MOCK("--val=1e39") == -1, "Overflow 32-bit float");
     ASSERT_EQ_INT(CARGS_INVALID_FLOAT, cargs_get_error());
+}
+
+TEST(type_double)
+{
+    cargs_reset();
+    double val;
+    cargs_double("val", NULL, &val, 0.0, NULL, NULL, "-");
+
+    ASSERT(PARSE_MOCK("--val=-3.141592653589793") != -1, "Valid double");
+    ASSERT(fabs(val - (-3.141592653589793)) < 0.000000000000001, "Value match");
+
+    cargs_reset();
+    cargs_double("val", NULL, &val, 0.0, NULL, NULL, "-");
+    ASSERT(PARSE_MOCK("--val=1e310") == -1, "Overflow double");
+    ASSERT_EQ_INT(CARGS_INVALID_DOUBLE, cargs_get_error());
 }
 
 TEST(type_char_and_string)
@@ -150,7 +225,6 @@ TEST(type_char_and_string)
     ASSERT(PARSE_MOCK("--char=XY") == -1, "Invalid char");
     ASSERT_EQ_INT(CARGS_INVALID_CHAR, cargs_get_error());
 }
-
 
 // --- Syntax & Delimiters ---
 
@@ -353,7 +427,11 @@ int main(void)
     RUN_TEST(type_boolean);
     RUN_TEST(type_int_signed);
     RUN_TEST(type_int_unsigned);
+    RUN_TEST(type_int64);
+    RUN_TEST(type_uint64);
+    RUN_TEST(type_size);
     RUN_TEST(type_float);
+    RUN_TEST(type_double);
     RUN_TEST(type_char_and_string);
     RUN_TEST(syntax_long_assignment);
     RUN_TEST(syntax_short_cluster);
