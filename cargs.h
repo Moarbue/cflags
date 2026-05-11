@@ -498,6 +498,9 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd)
     struct cargs_subcommand *children = cmd ? cmd->children_head : cargs_state.root_subcommands_head;
     cargs__print_help_commands(stream, children);
 
+    struct cargs_positional *pos = cmd ? cmd->positionals_head : cargs_state.global_positionals_head;
+    cargs__print_help_positionals(stream, pos);
+
     struct cargs_flag *flags = cmd ? cmd->flags_head : cargs_state.global_flags_head;
     cargs__print_help_options(stream, flags);
 }
@@ -781,7 +784,15 @@ CARGSDEF void cargs__print_help_prefix(FILE *stream, struct cargs_subcommand *cm
             fprintf(stream, " %s", chain[i]->name);
         }
     }
-    fprintf(stream, " [options] [arguments]\n\n");
+    fprintf(stream, " [options]");
+
+    struct cargs_positional *pos = cmd ? cmd->positionals_head : cargs_state.global_positionals_head;
+    while (pos != NULL) {
+        fprintf(stream, " <%s>", pos->name);
+        pos = pos->next;
+    }
+
+    fprintf(stream, " [arguments]\n\n");
 
     if (cmd != NULL && cmd->description != NULL) {
         fprintf(stream, "%s\n\n", cmd->description);
@@ -856,6 +867,27 @@ CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags)
         int pad = max_flag_len - cur_len;
         fprintf(stream, "%*s%s\n", pad, "", curr->description);
 
+        curr = curr->next;
+    }
+    fprintf(stream, "\n");
+}
+
+CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positional *pos)
+{
+    if (pos == NULL) return;
+
+    int max_len = 0;
+    struct cargs_positional *curr = pos;
+    while (curr != NULL) {
+        int len = strlen(curr->name) + 2;
+        if (len > max_len) max_len = len;
+        curr = curr->next;
+    }
+
+    fprintf(stream, "Arguments:\n");
+    curr = pos;
+    while (curr != NULL) {
+        fprintf(stream, "  <%-*s>  %s\n", max_len - 2, curr->name, curr->description ? curr->description : "");
         curr = curr->next;
     }
     fprintf(stream, "\n");
