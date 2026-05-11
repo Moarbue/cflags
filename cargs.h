@@ -632,6 +632,7 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
     } else if (flag->type == CARGS_FLAG_TYPE_INT || flag->type == CARGS_FLAG_TYPE_UINT || flag->type == CARGS_FLAG_TYPE_FLOAT) {
         char *endptr;
         if (flag->type == CARGS_FLAG_TYPE_INT) {
+            errno = 0;
             long val = strtol(token, &endptr, 0);
             if (endptr == token || *endptr != '\0') {
                 cargs_set_error(CARGS_INVALID_INT, "invalid integer '%s' for --%s", token, flag->long_name ? flag->long_name : flag->short_name);
