@@ -46,12 +46,12 @@ typedef enum {
 } cargs_error;
 
 
-CARGSDEF void cargs_int(const char *long_name, const char *short_name, int *reference, const int default_value, const char *argument, validation_func_t *validtion_func, const char *description);
-CARGSDEF void cargs_uint(const char *long_name, const char *short_name, unsigned int *reference, const unsigned int default_value, const char *argument, validation_func_t *validtion_func, const char *description);
-CARGSDEF void cargs_bool(const char *long_name, const char *short_name, bool *reference, const bool default_value, const char *argument, validation_func_t *validtion_func, const char *description);
-CARGSDEF void cargs_float(const char *long_name, const char *short_name, float *reference, const float default_value, const char *argument, validation_func_t *validtion_func, const char *description);
-CARGSDEF void cargs_char(const char *long_name, const char *short_name, char *reference, const char default_value, const char *argument, validation_func_t *validtion_func, const char *description);
-CARGSDEF void cargs_string(const char *long_name, const char *short_name, char **reference, const char *default_value, const char *argument, validation_func_t *validtion_func, const char *description);
+CARGSDEF void cargs_int(const char *long_name, const char *short_name, int *reference, const int default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_uint(const char *long_name, const char *short_name, unsigned int *reference, const unsigned int default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_bool(const char *long_name, const char *short_name, bool *reference, const bool default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_float(const char *long_name, const char *short_name, float *reference, const float default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_char(const char *long_name, const char *short_name, char *reference, const char default_value, const char *argument, validation_func_t *validation_func, const char *description);
+CARGSDEF void cargs_string(const char *long_name, const char *short_name, char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description);
 
 CARGSDEF void cargs_subcommand_start(const char *name, const char *description);
 CARGSDEF void cargs_subcommand_end(void);
