@@ -316,7 +316,7 @@ CARGSDEF int cargs_parse(int argc, char **argv)
                     // Everything after '--' is positional, no validation needed
                     first_positional = index;
                     positional_mode = true;
-                    index = argc; // skip remaining tokens
+                    state = STATE_PARSING_COMPLETE;
                     break;
                 } else if (strncmp(token, "--", 2) == 0) {
                     state = STATE_EVALUATE_LONG_FLAG;
@@ -546,17 +546,16 @@ CARGSDEF int cargs__evaluate_long_flag(char **token_ptr, struct cargs_flag **out
     *out_flag = lflag;
 
     if (equal_sign != NULL) {
-        if (lflag->argument == NULL) {
-            cargs_set_error(CARGS_UNEXPECTED_ARGUMENT, "flag --%.*s does not take an argument", (int)name_len, token);
-            return -1;
-        }
-        *token_ptr = equal_sign + 1; // Export advanced pointer
+        // Delimited assignment: valid for all types, including booleans.
+        *token_ptr = equal_sign + 1;
         *next_state = STATE_EVALUATE_FLAG_VALUE;
     } else {
-        if (lflag->argument != NULL) {
+        if (lflag->type != CARGS_FLAG_TYPE_BOOL) {
+            // Non-boolean types strictly require the next token as a value.
             *next_state = STATE_GET_FLAG_VALUE;
         } else {
-            if (lflag->type == CARGS_FLAG_TYPE_BOOL) {
+            // Implicit boolean true assignment.
+            if (lflag->reference) {
                 *(bool*)lflag->reference = true;
             }
             *next_state = STATE_FETCH_TOKEN;
@@ -575,29 +574,28 @@ CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag *
             return -1;
         }
 
-        if (sflag->argument != NULL) {
-            // Flag requires an argument
+        if (sflag->type != CARGS_FLAG_TYPE_BOOL) {
+            // Type requires a value
             if (*(p + 1) != '\0') {
-                // Rest of cluster is its argument
+                // Extract inline cluster value (e.g. -fValue)
                 if (!cargs__parse_flag_value(sflag, p + 1)) return -1;
-                p += strlen(p); // skip the rest
+                p += strlen(p); // skip the consumed cluster remainder
             } else {
-                // Last char – next token is the argument
+                // Value requires next token in argv (e.g. -f Value)
                 *out_flag = sflag;
                 *next_state = STATE_GET_FLAG_VALUE;
-                // We must exit this case; the while loop will break
                 goto finish_cluster;
             }
         } else {
-            // No argument – set boolean true (or whatever the default)
-            if (sflag->type == CARGS_FLAG_TYPE_BOOL) {
+            // Boolean short flag
+            if (sflag->reference) {
                 *(bool*)sflag->reference = true;
             }
             p++;
         }
     }
     finish_cluster:
-    if (*next_state == STATE_EVALUATE_SHORT_CLUSTER) // not changed inside loop
+    if (*next_state == STATE_EVALUATE_SHORT_CLUSTER)
         *next_state = STATE_FETCH_TOKEN;
     return 0;
 }
