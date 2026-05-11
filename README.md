@@ -1,8 +1,8 @@
 # cargs
 
-A robust, POSIX-compliant, single-header command-line argument parsing library for C99.
+A robust, POSIX-compliant, single-header command-line argument parsing library for C99. 
 
-`cargs` implements a deterministic Finite State Machine (FSM) to process arguments without dynamic memory allocation. It supports infinite-depth subcommand nesting, short flag clustering, strict GNU-style delimiter assignment, and automated help generation.
+`cargs` implements a deterministic Finite State Machine (FSM) to process arguments without dynamic memory allocation. It supports infinite-depth subcommand nesting, short flag clustering, strict GNU-style delimiter assignment, mandatory positional mapping, and automated help generation.
 
 ## Features
 
@@ -10,16 +10,18 @@ A robust, POSIX-compliant, single-header command-line argument parsing library f
 * **Zero Dynamic Memory:** Operates entirely on bounded static memory pools. No `malloc` or `free`.
 * **POSIX/GNU Syntax:** Supports `--flag=value`, `--flag value`, `-f value`, inline clusters `-abc`, inline assignment `-fValue`, and `--` positional termination.
 * **Subcommand FSM:** Define isolated argument scopes for nested execution trees (e.g., `cmd remote add --tags=stable`).
+* **Automatic Positional Mapping:** Securely bind mandatory positional arguments without manual `argc` index bounds checking.
 * **Primitive Type Parsing:** Native resolution for `bool`, `int`, `unsigned int`, `float`, `char`, and `string`.
 * **Safety & Validation:** Prevents negative integer wraparound, catches 32-bit/64-bit overflow out-of-bounds, and supports custom validation callback injection.
 
 ## Integration
 
-Include the header in your project. Define `CARGS_IMPLEMENTATION` in exactly *one* C source file to instantiate the parser implementations. Define the required static pool capacities prior to inclusion.
+Define the required static pool capacities prior to inclusion in exactly *one* C source file.
 
 ```c
 #define CARGS_MAX_FLAGS 50
 #define CARGS_MAX_SUBCOMMANDS 20
+#define CARGS_MAX_POSITIONALS 20
 #define CARGS_IMPLEMENTATION
 #include "cargs.h"
 
@@ -30,6 +32,7 @@ Include the header in your project. Define `CARGS_IMPLEMENTATION` in exactly *on
 ```c
 #define CARGS_MAX_FLAGS 20
 #define CARGS_MAX_SUBCOMMANDS 10
+#define CARGS_MAX_POSITIONALS 10
 #define CARGS_IMPLEMENTATION
 #include "cargs.h"
 
@@ -42,25 +45,28 @@ int main(int argc, char *argv[])
     bool help_flag;
     const char *config_path;
 
-    cargs_set_program_description("vcs - Distributed version control system");
+    cargs_set_program_description("vcs - Distributed version control system mockup");
     cargs_bool("help", "h", &help_flag, false, NULL, NULL, "Print global help message");
     cargs_string("config", "C", &config_path, "~/.vcsconfig", "<file>", NULL, "Custom config path");
 
     // Subcommand scope: clone
-    bool clone_verbose;
+    bool clone_verbose, clone_help;
     const char *clone_branch;
+    const char *clone_url;
     
     cargs_subcommand_start("clone", "Clone a repository into a new directory");
+        cargs_positional("url", &clone_url, "The repository to clone");
+        cargs_bool("help", "h", &clone_help, false, NULL, NULL, "Print clone help");
         cargs_bool("verbose", "V", &clone_verbose, false, NULL, NULL, "Clone verbosely");
         cargs_string("branch", "b", &clone_branch, "main", "<branch>", NULL, "Target branch");
     cargs_subcommand_end();
 
     // Execute FSM
-    int pos_idx = cargs_parse(argc, argv);
+    int opt_idx = cargs_parse(argc, argv);
     struct cargs_subcommand *active_cmd = cargs_get_active_subcommand();
 
-    // Handle Parsing Failure
-    if (pos_idx == -1) {
+    // Handle Parsing Failure (automatically catches missing positionals)
+    if (opt_idx == -1) {
         cargs_log_error(stderr);
         cargs_print_help(stderr, active_cmd);
         return 1;
@@ -74,11 +80,11 @@ int main(int argc, char *argv[])
 
     // Evaluate Subcommands
     if (active_cmd && strcmp(active_cmd->name, "clone") == 0) {
-        if (pos_idx >= argc) {
-            fprintf(stderr, "Error: 'clone' requires a <url> positional argument.\n");
-            return 1;
+        if (clone_help) {
+            cargs_print_help(stdout, active_cmd);
+            return 0;
         }
-        printf("Cloning %s into branch %s. Verbose: %d\n", argv[pos_idx], clone_branch, clone_verbose);
+        printf("Cloning %s into branch %s. Verbose: %d\n", clone_url, clone_branch, clone_verbose);
     }
 
     return 0;
@@ -94,6 +100,7 @@ Must be defined before `#include "cargs.h"`.
 
 * `CARGS_MAX_FLAGS`: Total number of flags across all scopes.
 * `CARGS_MAX_SUBCOMMANDS`: Total number of subcommands.
+* `CARGS_MAX_POSITIONALS`: Total number of mandatory positional arguments.
 
 ### Flag Definition
 
@@ -106,6 +113,15 @@ void cargs_uint(const char *long_name, const char *short_name, unsigned int *ref
 void cargs_float(const char *long_name, const char *short_name, float *reference, const float default_value, const char *argument, validation_func_t *validation_func, const char *description);
 void cargs_char(const char *long_name, const char *short_name, char *reference, const char default_value, const char *argument, validation_func_t *validation_func, const char *description);
 void cargs_string(const char *long_name, const char *short_name, const char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description);
+
+```
+
+### Positional Arguments
+
+Register mandatory positional arguments. The FSM maps them sequentially after flag evaluation.
+
+```c
+void cargs_positional(const char *name, const char **reference, const char *description);
 
 ```
 
@@ -123,7 +139,7 @@ void cargs_subcommand_end(void);
 ### Execution & State
 
 ```c
-// Parses argv array. Returns the starting index of positional arguments, or -1 on error.
+// Parses argv array. Returns the starting index of optional positional arguments, or -1 on error.
 int cargs_parse(int argc, char **argv);
 
 // Returns a pointer to the active terminal subcommand.
@@ -156,6 +172,7 @@ Evaluate `cargs_get_error()` against the following enum if `cargs_parse` returns
 * `CARGS_UNKNOWN_FLAG`
 * `CARGS_UNKNOWN_SUBCOMMAND`
 * `CARGS_MISSING_ARGUMENT`
+* `CARGS_MISSING_POSITIONAL`
 * `CARGS_UNEXPECTED_ARGUMENT`
 * `CARGS_INVALID_BOOL`
 * `CARGS_INVALID_INT`
