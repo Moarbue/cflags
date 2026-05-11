@@ -131,13 +131,29 @@ static struct cargs_state {
     bool parsed;
 } cargs_state = {0};
 
+enum CARGS_PARSE_STATE {
+    STATE_FETCH_TOKEN,
+    STATE_CLASSIFY_TOKEN,
+    STATE_EVALUATE_LONG_FLAG,
+    STATE_EVALUATE_SHORT_CLUSTER,
+    STATE_POSITIONAL_FETCH_CHECK,
+    STATE_GET_FLAG_VALUE,
+    STATE_EVALUATE_FLAG_VALUE,
+    STATE_PARSING_COMPLETE,
+};
+
 CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char *short_name, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs__panic_func(const char *file, int line, const char *message, ...);
 #define cargs__panic(message, ...) cargs__panic_func(__FILE__, __LINE__, message, ##__VA_ARGS__)
 CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, const char *short_name);
+CARGSDEF int cargs__evaluate_long_flag(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state);
+CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state);
 CARGSDEF bool cargs__find_and_set_subcommand(struct cargs_subcommand *head, const char *name, struct cargs_subcommand **cmd);
 CARGSDEF bool cargs__find_and_set_flag(struct cargs_flag *head, const char *name, struct cargs_flag **flag);
 CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token);
+CARGSDEF void cargs__print_help_prefix(FILE *stream, struct cargs_subcommand *cmd);
+CARGSDEF void cargs__print_help_commands(FILE *stream, struct cargs_subcommand *children);
+CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags);
 
 #define CARGS_FLAG(enum_type, function_suffix, type_identifier) \
     void cargs_##function_suffix(const char *long_name, const char *short_name, type_identifier *reference, const type_identifier default_value, const char *argument, validation_func_t *validation_func, const char *description) \
@@ -249,16 +265,6 @@ CARGSDEF int cargs_parse(int argc, char **argv)
     if (cargs_state.parsed) cargs__panic("arguments already parsed");
     if (cargs_state.current_subcommand != NULL) cargs__panic("unterminated subcommand '%s'", cargs_state.current_subcommand->name);
 
-    enum CARGS_PARSE_STATE {
-        STATE_FETCH_TOKEN,
-        STATE_CLASSIFY_TOKEN,
-        STATE_EVALUATE_LONG_FLAG,
-        STATE_EVALUATE_SHORT_CLUSTER,
-        STATE_POSITIONAL_FETCH_CHECK,
-        STATE_GET_FLAG_VALUE,
-        STATE_EVALUATE_FLAG_VALUE,
-        STATE_PARSING_COMPLETE,
-    };
     enum CARGS_PARSE_STATE state = STATE_FETCH_TOKEN;
 
     int index = 1; // skip program name
@@ -314,89 +320,11 @@ CARGSDEF int cargs_parse(int argc, char **argv)
                 break;
             }
             case STATE_EVALUATE_LONG_FLAG: {
-                token += 2; // skip "--"
-                char *equal_sign = strchr(token, '=');
-                size_t name_len = (equal_sign != NULL) ? (size_t)(equal_sign - token) : strlen(token);
-
-                // Look up flag in current scope using exact length match
-                struct cargs_flag **flag_head = cargs_state.current_subcommand ?
-                    &cargs_state.current_subcommand->flags_head :
-                    &cargs_state.global_flags_head;
-
-                flag = NULL;
-                struct cargs_flag *curr = *flag_head;
-                while (curr != NULL) {
-                    if (curr->long_name &&
-                        strncmp(curr->long_name, token, name_len) == 0 &&
-                        curr->long_name[name_len] == '\0') {
-                        flag = curr;
-                        break;
-                    }
-                    curr = curr->next;
-                }
-
-                if (flag == NULL) {
-                    cargs_set_error(CARGS_UNKNOWN_FLAG, "unknown flag: --%.*s", (int)name_len, token);
-                    return -1;
-                }
-
-                if (equal_sign != NULL) {
-                    if (flag->argument == NULL) {
-                        cargs_set_error(CARGS_UNEXPECTED_ARGUMENT, "flag --%.*s does not take an argument", (int)name_len, token);
-                        return -1;
-                    }
-                    token = equal_sign + 1;
-                    state = STATE_EVALUATE_FLAG_VALUE;
-                } else {
-                    if (flag->argument != NULL) {
-                        state = STATE_GET_FLAG_VALUE;
-                    } else {
-                        // Boolean flag (or any without argument) set to true
-                        if (flag->type == CARGS_FLAG_TYPE_BOOL) {
-                            *(bool*)flag->reference = true;
-                        }
-                        state = STATE_FETCH_TOKEN;
-                    }
-                }
+                if (cargs__evaluate_long_flag(&token, &flag, &state) == -1) return -1;
                 break;
             }
             case STATE_EVALUATE_SHORT_CLUSTER: {
-                const char *p = token + 1; // skip '-'
-                while (*p != '\0') {
-                    char sname[2] = { *p, '\0' };
-                    struct cargs_flag *sflag = NULL;
-                    struct cargs_flag *head = cargs_state.current_subcommand ?
-                        cargs_state.current_subcommand->flags_head :
-                        cargs_state.global_flags_head;
-                    if (!cargs__find_and_set_flag(head, sname, &sflag)) {
-                        cargs_set_error(CARGS_UNKNOWN_FLAG, "unknown flag: -%c", *p);
-                        return -1;
-                    }
-
-                    if (sflag->argument != NULL) {
-                        // Flag requires an argument
-                        if (*(p + 1) != '\0') {
-                            // Rest of cluster is its argument
-                            if (!cargs__parse_flag_value(sflag, p + 1)) return -1;
-                            p += strlen(p); // skip the rest
-                        } else {
-                            // Last char – next token is the argument
-                            flag = sflag;
-                            state = STATE_GET_FLAG_VALUE;
-                            // We must exit this case; the while loop will break
-                            goto finish_cluster;
-                        }
-                    } else {
-                        // No argument – set boolean true (or whatever the default)
-                        if (sflag->type == CARGS_FLAG_TYPE_BOOL) {
-                            *(bool*)sflag->reference = true;
-                        }
-                        p++;
-                    }
-                }
-                finish_cluster:
-                if (state == STATE_EVALUATE_SHORT_CLUSTER) // not changed inside loop
-                    state = STATE_FETCH_TOKEN;
+                if (cargs__evaluate_short_cluster(&token, &flag, &state) == -1) return -1;
                 break;
             }
             case STATE_POSITIONAL_FETCH_CHECK: {
@@ -473,108 +401,13 @@ CARGSDEF struct cargs_subcommand *cargs_get_subcommand(struct cargs_subcommand *
 
 CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd)
 {
-    char prefix[512] = {0};
-    snprintf(prefix, sizeof (prefix), "%s", cargs_state.program_name);
+    cargs__print_help_prefix(stream, cmd);
 
-    // traverse execution path to build prefix
-    if (cmd != NULL) {
-        struct cargs_subcommand *chain[CARGS_MAX_SUBCOMMANDS];
-        int depth = 0;
-        struct cargs_subcommand *curr = cmd;
+    struct cargs_subcommand *children = cmd ? cmd->children_head : cargs_state.root_subcommands_head;
+    cargs__print_help_commands(stream, children);
 
-        while (curr != NULL) {
-            chain[depth++] = curr;
-            curr = curr->parent;
-        }
-
-        for (int i = depth - 1; i >= 0; i--) {
-            size_t p_len = strlen(prefix);
-            if (p_len >= sizeof(prefix) - 1) break;
-            snprintf(prefix + p_len, sizeof(prefix) - p_len, " %s", chain[i]->name);
-        }
-    }
-
-    struct cargs_subcommand *children = cmd != NULL ? cmd->children_head : cargs_state.root_subcommands_head;
-    struct cargs_flag *flags = cmd != NULL ? cmd->flags_head : cargs_state.global_flags_head;
-
-    // print usage
-    fprintf(stream, "Usage: %s", prefix);
-    if (flags != NULL) fprintf(stream, " [<options>]");
-    if (children != NULL) fprintf(stream, " [<command>]");
-    fprintf(stream, "\n\n");
-
-    // print command description
-    if (cmd != NULL) {
-        fprintf(stream, "%s\n\n", cmd->description);
-    } else if (cargs_state.program_description != NULL) {
-        fprintf(stream, "%s\n\n", cargs_state.program_description);
-    }
-
-    // print child subcommands
-    if (children != NULL) {
-        int max_cmd_len = 0;
-        struct cargs_subcommand *curr = children;
-        while (curr != NULL) {
-            int len = strlen(curr->name);
-            if (len > max_cmd_len) max_cmd_len = len;
-            curr = curr->next;
-        }
-
-        fprintf(stream, "Commands:\n");
-        curr = children;
-        while (curr != NULL) {
-            fprintf(stream, "  %-*s  %s\n", max_cmd_len, curr->name, curr->description);
-            curr = curr->next;
-        }
-        fprintf(stream, "\n");
-    }
-
-    // print flags
-    if (flags != NULL) {
-        int max_flag_len = 0;
-        struct cargs_flag *curr = flags;
-        while (curr != NULL) {
-            int len = 0;
-            if (curr->short_name && curr->long_name) len += 4;
-            else if (curr->short_name) len += 3;
-            if (curr->long_name) len += strlen(curr->long_name) + 3;
-            if (curr->argument) len += strlen(curr->argument) + 1;
-            if (len > max_flag_len) max_flag_len = len;
-            curr = curr->next;
-        }
-
-        fprintf(stream, "Options:\n");
-        curr = flags;
-        while (curr != NULL) {
-            fprintf(stream, "  ");
-
-            int cur_len = 0;
-            if (curr->short_name && curr->long_name) {
-                fprintf(stream, "-%c, ", curr->short_name[0]);
-                cur_len += 4;
-            } else if (curr->short_name) {
-                fprintf(stream, "-%c ", curr->short_name[0]);
-                cur_len += 3;
-            }
-
-            if (curr->long_name) {
-                fprintf(stream, "--%s ", curr->long_name);
-                cur_len += strlen(curr->long_name) + 3;
-            }
-
-            if (curr->argument) {
-                fprintf(stream, "%s ", curr->argument);
-                cur_len += strlen(curr->argument) + 1;
-            }
-
-            int pad = max_flag_len - cur_len;
-
-            fprintf(stream, "%*s%s\n", pad, "", curr->description);
-
-            curr = curr->next;
-        }
-        fprintf(stream, "\n");
-    }
+    struct cargs_flag *flags = cmd ? cmd->flags_head : cargs_state.global_flags_head;
+    cargs__print_help_options(stream, flags);
 }
 
 
@@ -639,6 +472,97 @@ CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *
     }
 }
 
+CARGSDEF int cargs__evaluate_long_flag(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state)
+{
+    char *token = *token_ptr;
+    token += 2; // skip "--"
+    char *equal_sign = strchr(token, '=');
+    size_t name_len = (equal_sign != NULL) ? (size_t)(equal_sign - token) : strlen(token);
+
+    struct cargs_flag **flag_head = cargs_state.current_subcommand ?
+        &cargs_state.current_subcommand->flags_head :
+        &cargs_state.global_flags_head;
+
+    struct cargs_flag *lflag = NULL;
+    struct cargs_flag *curr = *flag_head;
+    while (curr != NULL) {
+        if (curr->long_name &&
+            strncmp(curr->long_name, token, name_len) == 0 &&
+            curr->long_name[name_len] == '\0') {
+            lflag = curr;
+            break;
+        }
+        curr = curr->next;
+    }
+
+    if (lflag == NULL) {
+        cargs_set_error(CARGS_UNKNOWN_FLAG, "unknown flag: --%.*s", (int)name_len, token);
+        return -1;
+    }
+
+    *out_flag = lflag;
+
+    if (equal_sign != NULL) {
+        if (lflag->argument == NULL) {
+            cargs_set_error(CARGS_UNEXPECTED_ARGUMENT, "flag --%.*s does not take an argument", (int)name_len, token);
+            return -1;
+        }
+        *token_ptr = equal_sign + 1; // Export advanced pointer
+        *next_state = STATE_EVALUATE_FLAG_VALUE;
+    } else {
+        if (lflag->argument != NULL) {
+            *next_state = STATE_GET_FLAG_VALUE;
+        } else {
+            if (lflag->type == CARGS_FLAG_TYPE_BOOL) {
+                *(bool*)lflag->reference = true;
+            }
+            *next_state = STATE_FETCH_TOKEN;
+        }
+    }
+    return 0;
+}
+
+CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state)
+{
+    const char *p = (*token_ptr) + 1; // skip '-'
+    while (*p != '\0') {
+        char sname[2] = { *p, '\0' };
+        struct cargs_flag *sflag = NULL;
+        struct cargs_flag *head = cargs_state.current_subcommand ?
+            cargs_state.current_subcommand->flags_head :
+            cargs_state.global_flags_head;
+        if (!cargs__find_and_set_flag(head, sname, &sflag)) {
+            cargs_set_error(CARGS_UNKNOWN_FLAG, "unknown flag: -%c", *p);
+            return -1;
+        }
+
+        if (sflag->argument != NULL) {
+            // Flag requires an argument
+            if (*(p + 1) != '\0') {
+                // Rest of cluster is its argument
+                if (!cargs__parse_flag_value(sflag, p + 1)) return -1;
+                p += strlen(p); // skip the rest
+            } else {
+                // Last char – next token is the argument
+                *out_flag = sflag;
+                *next_state = STATE_GET_FLAG_VALUE;
+                // We must exit this case; the while loop will break
+                goto finish_cluster;
+            }
+        } else {
+            // No argument – set boolean true (or whatever the default)
+            if (sflag->type == CARGS_FLAG_TYPE_BOOL) {
+                *(bool*)sflag->reference = true;
+            }
+            p++;
+        }
+    }
+    finish_cluster:
+    if (*next_state == STATE_EVALUATE_SHORT_CLUSTER) // not changed inside loop
+        *next_state = STATE_FETCH_TOKEN;
+    return 0;
+}
+
 CARGSDEF bool cargs__find_and_set_subcommand(struct cargs_subcommand *head, const char *name, struct cargs_subcommand **cmd)
 {
     struct cargs_subcommand *curr = head;
@@ -688,18 +612,26 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
                 cargs_set_error(CARGS_INVALID_INT, "invalid integer '%s' for --%s", token, flag->long_name ? flag->long_name : flag->short_name);
                 return false;
             }
-            if (val > INT_MAX || val < INT_MIN) {
+            if (val > INT_MAX || val < INT_MIN || errno == ERANGE) {
                 cargs_set_error(CARGS_INVALID_INT, "integer out of range '%s'", token);
                 return false;
             }
             *(int*)flag->reference = (int)val;
         } else if (flag->type == CARGS_FLAG_TYPE_UINT) {
+            errno = 0;
             unsigned long val = strtoul(token, &endptr, 0);
             if (endptr == token || *endptr != '\0') {
                 cargs_set_error(CARGS_INVALID_UINT, "invalid unsigned integer '%s'", token);
                 return false;
             }
-            if (val > UINT_MAX) {
+            // Add prefix check for negative numbers
+            const char *check_neg = token;
+            while (isspace((unsigned char)*check_neg)) check_neg++;
+            if (*check_neg == '-') {
+                cargs_set_error(CARGS_INVALID_UINT, "unsigned integer cannot be negative '%s'", token);
+                return false;
+            }
+            if (val > UINT_MAX || errno == ERANGE) {
                 cargs_set_error(CARGS_INVALID_UINT, "unsigned integer out of range '%s'", token);
                 return false;
             }
@@ -735,6 +667,102 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
         }
     }
     return true;
+}
+
+CARGSDEF void cargs__print_help_prefix(FILE *stream, struct cargs_subcommand *cmd)
+{
+    fprintf(stream, "Usage: %s", cargs_state.program_name ? cargs_state.program_name : "program");
+
+    if (cmd != NULL) {
+        struct cargs_subcommand *chain[CARGS_MAX_SUBCOMMANDS];
+        int depth = 0;
+        struct cargs_subcommand *curr = cmd;
+        while (curr != NULL && depth < CARGS_MAX_SUBCOMMANDS) {
+            chain[depth++] = curr;
+            curr = curr->parent;
+        }
+        for (int i = depth - 1; i >= 0; i--) {
+            fprintf(stream, " %s", chain[i]->name);
+        }
+    }
+    fprintf(stream, " [options] [arguments]\n\n");
+
+    if (cmd != NULL && cmd->description != NULL) {
+        fprintf(stream, "%s\n\n", cmd->description);
+    } else if (cargs_state.program_description != NULL) {
+        fprintf(stream, "%s\n\n", cargs_state.program_description);
+    }
+}
+
+CARGSDEF void cargs__print_help_commands(FILE *stream, struct cargs_subcommand *children)
+{
+    if (children == NULL) return;
+
+    int max_cmd_len = 0;
+    struct cargs_subcommand *curr = children;
+    while (curr != NULL) {
+        int len = strlen(curr->name);
+        if (len > max_cmd_len) max_cmd_len = len;
+        curr = curr->next;
+    }
+
+    fprintf(stream, "Commands:\n");
+    curr = children;
+    while (curr != NULL) {
+        fprintf(stream, "  %-*s  %s\n", max_cmd_len, curr->name, curr->description);
+        curr = curr->next;
+    }
+    fprintf(stream, "\n");
+}
+
+CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags)
+{
+    if (flags == NULL) return;
+
+    int max_flag_len = 0;
+    struct cargs_flag *curr = flags;
+    while (curr != NULL) {
+        int len = 0;
+        if (curr->short_name && curr->long_name) len += 4;
+        else if (curr->short_name) len += 3;
+
+        if (curr->long_name) len += strlen(curr->long_name) + 3;
+        if (curr->argument) len += strlen(curr->argument) + 1;
+
+        if (len > max_flag_len) max_flag_len = len;
+        curr = curr->next;
+    }
+
+    fprintf(stream, "Options:\n");
+    curr = flags;
+    while (curr != NULL) {
+        fprintf(stream, "  ");
+
+        int cur_len = 0;
+        if (curr->short_name && curr->long_name) {
+            fprintf(stream, "-%c, ", curr->short_name[0]);
+            cur_len += 4;
+        } else if (curr->short_name) {
+            fprintf(stream, "-%c ", curr->short_name[0]);
+            cur_len += 3;
+        }
+
+        if (curr->long_name) {
+            fprintf(stream, "--%s ", curr->long_name);
+            cur_len += strlen(curr->long_name) + 3;
+        }
+
+        if (curr->argument) {
+            fprintf(stream, "%s ", curr->argument);
+            cur_len += strlen(curr->argument) + 1;
+        }
+
+        int pad = max_flag_len - cur_len;
+        fprintf(stream, "%*s%s\n", pad, "", curr->description);
+
+        curr = curr->next;
+    }
+    fprintf(stream, "\n");
 }
 
 #endif // CARGS_IMPLEMENTATION
