@@ -247,6 +247,7 @@ CARGSDEF void cargs_subcommand_start(const char *name, const char *description)
     subcmd->parent = cargs_state.current_subcommand;
     subcmd->children_head = NULL;
     subcmd->flags_head = NULL;
+    subcmd->positionals_head = NULL;
 
     // append subcommand to linked list
     if (*head == NULL) {
@@ -267,6 +268,28 @@ CARGSDEF void cargs_subcommand_end(void)
     if (cargs_state.current_subcommand == NULL) cargs__panic("unbalanced subcommand end: no active subcommand");
 
     cargs_state.current_subcommand = cargs_state.current_subcommand->parent;
+}
+
+CARGSDEF void cargs_positional(const char *name, const char **reference, const char *description)
+{
+    if (cargs_state.parsed) cargs__panic("arguments already parsed");
+    if (cargs_state.positionals_allocated >= CARGS_MAX_POSITIONALS) cargs__panic("too many positionals, define bigger CARGS_MAX_POSITIONALS");
+    if (name == NULL) cargs__panic("positional name cannot be NULL");
+
+    struct cargs_positional *pos = &cargs_state.positional_pool[cargs_state.positionals_allocated++];
+    pos->next = NULL;
+    pos->name = name;
+    pos->reference = reference;
+    pos->description = description;
+
+    struct cargs_positional **head = cargs__get_active_positionals_head();
+    if (*head == NULL) {
+        *head = pos;
+    } else {
+        struct cargs_positional *curr = *head;
+        while (curr->next != NULL) curr = curr->next;
+        curr->next = pos;
+    }
 }
 
 CARGSDEF void cargs_set_error(cargs_error error, const char *format, ...)
@@ -527,6 +550,13 @@ CARGSDEF struct cargs_subcommand **cargs__get_active_subcommands_head(void)
     return cargs_state.current_subcommand ?
         &cargs_state.current_subcommand->children_head :
         &cargs_state.root_subcommands_head;
+}
+
+CARGSDEF struct cargs_positional **cargs__get_active_positionals_head(void)
+{
+    return cargs_state.current_subcommand ?
+        &cargs_state.current_subcommand->positionals_head :
+        &cargs_state.global_positionals_head;
 }
 
 CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, const char *short_name)
