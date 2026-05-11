@@ -622,8 +622,6 @@ CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *
     while (head != NULL) {
         if (long_name  && head->long_name  && strcmp(head->long_name, long_name) == 0) cargs__panic("duplicate flag name: %s", long_name);
         if (short_name && head->short_name && head->short_name[0] == short_name[0]) cargs__panic("duplicate flag name: %c", short_name[0]);
-        if (long_name  && head->short_name && head->short_name[0] == long_name[0]) cargs__panic("duplicate flag name: %s", long_name);
-        if (short_name && head->long_name  && head->long_name[0]  == short_name[0]) cargs__panic("duplicate flag name: %c", short_name[0]);
         head = head->next;
     }
 }
