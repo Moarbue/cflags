@@ -170,11 +170,12 @@ enum CARGS_PARSE_STATE {
 CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char *short_name, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs__panic_func(const char *file, int line, const char *message, ...);
 #define cargs__panic(message, ...) cargs__panic_func(__FILE__, __LINE__, message, ##__VA_ARGS__)
+CARGSDEF struct cargs_flag **cargs__get_active_flags_head(void);
+CARGSDEF struct cargs_subcommand **cargs__get_active_subcommands_head(void);
 CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, const char *short_name);
 CARGSDEF int cargs__evaluate_long_flag(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state);
 CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state);
-CARGSDEF bool cargs__find_and_set_subcommand(struct cargs_subcommand *head, const char *name, struct cargs_subcommand **cmd);
-CARGSDEF bool cargs__find_and_set_flag(struct cargs_flag *head, const char *name, struct cargs_flag **flag);
+CARGSDEF bool cargs__find_short_flag(struct cargs_flag *head, char short_name, struct cargs_flag **flag);
 CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token);
 CARGSDEF void cargs__print_help_prefix(FILE *stream, struct cargs_subcommand *cmd);
 CARGSDEF void cargs__print_help_commands(FILE *stream, struct cargs_subcommand *children);
@@ -203,13 +204,7 @@ CARGSDEF void cargs_subcommand_start(const char *name, const char *description)
     if (!isalnum(name[0])) cargs__panic("subcommand name must start with an alphanumeric character");
     if (description == NULL) cargs__panic("subcommand description cannot be NULL");
 
-    struct cargs_subcommand **head;
-
-    if (cargs_state.current_subcommand == NULL) {
-        head = &cargs_state.root_subcommands_head;
-    } else {
-        head = &cargs_state.current_subcommand->children_head;
-    }
+    struct cargs_subcommand **head = cargs__get_active_subcommands_head();
 
     // check for duplicate subcommands at current level
     struct cargs_subcommand *curr = *head;
@@ -325,18 +320,20 @@ CARGSDEF int cargs_parse(int argc, char **argv)
                 } else {
                     // Check for subcommand
                     struct cargs_subcommand *subcmd = NULL;
-                    struct cargs_subcommand *head = cargs_state.current_subcommand ?
-                        cargs_state.current_subcommand->children_head :
-                        cargs_state.root_subcommands_head;
-                    if (cargs__find_and_set_subcommand(head, token, &subcmd)) {
+                    struct cargs_subcommand *curr = *cargs__get_active_subcommands_head();
+                    while (curr != NULL) {
+                        if (strcmp(curr->name, token) == 0) {
+                            subcmd = curr;
+                            break;
+                        }
+                        curr = curr->next;
+                    }
+
+                    if (subcmd != NULL) {
                         cargs_state.current_subcommand = subcmd;
                         state = STATE_FETCH_TOKEN;
                     } else {
                         // This is the first positional argument
-                        if (token[0] == '-') {
-                            cargs_set_error(CARGS_POSITIONAL_STARTS_WITH_DASH, "unexpected option '%s'", token);
-                            return -1;
-                        }
                         first_positional = (index - 1);
                         positional_mode = true;
                         state = STATE_POSITIONAL_FETCH_CHECK;
@@ -356,7 +353,8 @@ CARGSDEF int cargs_parse(int argc, char **argv)
                 // Continue checking remaining positionals
                 while (index < argc) {
                     token = argv[index];
-                    if (token[0] == '-') {
+                    // single dash is standard Unix convention for stdin
+                    if (token[0] == '-' && strlen(token) > 1) {
                         cargs_set_error(CARGS_POSITIONAL_STARTS_WITH_DASH, "unexpected option '%s'", token);
                         return -1;
                     }
@@ -466,7 +464,7 @@ CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const cha
     flag->description = description;
 
     // append flag to linked list
-    struct cargs_flag **head = cargs_state.current_subcommand != NULL ? &cargs_state.current_subcommand->flags_head : &cargs_state.global_flags_head;
+    struct cargs_flag **head = cargs__get_active_flags_head();
     if (*head == NULL) *head = flag; // list is empty
     else {
         struct cargs_flag *curr = *head;
@@ -488,6 +486,20 @@ CARGSDEF void cargs__panic_func(const char *file, int line, const char *message,
     exit(EXIT_FAILURE);
 }
 
+CARGSDEF struct cargs_flag **cargs__get_active_flags_head(void)
+{
+    return cargs_state.current_subcommand ?
+        &cargs_state.current_subcommand->flags_head :
+        &cargs_state.global_flags_head;
+}
+
+CARGSDEF struct cargs_subcommand **cargs__get_active_subcommands_head(void)
+{
+    return cargs_state.current_subcommand ?
+        &cargs_state.current_subcommand->children_head :
+        &cargs_state.root_subcommands_head;
+}
+
 CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, const char *short_name)
 {
     while (head != NULL) {
@@ -504,9 +516,7 @@ CARGSDEF int cargs__evaluate_long_flag(char **token_ptr, struct cargs_flag **out
     char *equal_sign = strchr(token, '=');
     size_t name_len = (equal_sign != NULL) ? (size_t)(equal_sign - token) : strlen(token);
 
-    struct cargs_flag **flag_head = cargs_state.current_subcommand ?
-        &cargs_state.current_subcommand->flags_head :
-        &cargs_state.global_flags_head;
+    struct cargs_flag **flag_head = cargs__get_active_flags_head();
 
     struct cargs_flag *lflag = NULL;
     struct cargs_flag *curr = *flag_head;
@@ -551,12 +561,8 @@ CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag *
 {
     const char *p = (*token_ptr) + 1; // skip '-'
     while (*p != '\0') {
-        char sname[2] = { *p, '\0' };
         struct cargs_flag *sflag = NULL;
-        struct cargs_flag *head = cargs_state.current_subcommand ?
-            cargs_state.current_subcommand->flags_head :
-            cargs_state.global_flags_head;
-        if (!cargs__find_and_set_flag(head, sname, &sflag)) {
+        if (!cargs__find_short_flag(*cargs__get_active_flags_head(), *p, &sflag)) {
             cargs_set_error(CARGS_UNKNOWN_FLAG, "unknown flag: -%c", *p);
             return -1;
         }
@@ -588,28 +594,11 @@ CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag *
     return 0;
 }
 
-CARGSDEF bool cargs__find_and_set_subcommand(struct cargs_subcommand *head, const char *name, struct cargs_subcommand **cmd)
-{
-    struct cargs_subcommand *curr = head;
-    while (curr != NULL) {
-        if (strcmp(curr->name, name) == 0) {
-            *cmd = curr;
-            return true;
-        }
-        curr = curr->next;
-    }
-    return false;
-}
-
-CARGSDEF bool cargs__find_and_set_flag(struct cargs_flag *head, const char *name, struct cargs_flag **flag)
+CARGSDEF bool cargs__find_short_flag(struct cargs_flag *head, char short_name, struct cargs_flag **flag)
 {
     struct cargs_flag *curr = head;
     while (curr != NULL) {
-        if (curr->long_name && strcmp(curr->long_name, name) == 0) {
-            *flag = curr;
-            return true;
-        }
-        if (curr->short_name && strcmp(curr->short_name, name) == 0) {
+        if (curr->short_name && curr->short_name[0] == short_name) {
             *flag = curr;
             return true;
         }
