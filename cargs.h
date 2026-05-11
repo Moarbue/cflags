@@ -465,6 +465,8 @@ CARGSDEF void cargs_reset(void)
     cargs_state.current_subcommand = NULL;
     cargs_state.flags_allocated = 0;
     cargs_state.subcommands_allocated = 0;
+    cargs_state.global_positionals_head = NULL;
+    cargs_state.positionals_allocated = 0;
     cargs_state.error = CARGS_OK;
     cargs_state.error_message[0] = '\0';
     cargs_state.parsed = false;
