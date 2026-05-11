@@ -34,6 +34,10 @@ SOFTWARE.
 #   error "CARGS_MAX_SUBCOMMANDS not defined"
 #endif
 
+#ifndef CARGS_MAX_POSITIONALS
+#   error "CARGS_MAX_POSITIONALS not defined"
+#endif
+
 #ifndef CARGS_MAX_ERROR_LEN
 #   define CARGS_MAX_ERROR_LEN 512
 #endif
@@ -59,6 +63,7 @@ typedef enum {
     CARGS_OK,
     CARGS_INVALID_ARGUMENT,
     CARGS_MISSING_ARGUMENT,
+    CARGS_MISSING_POSITIONAL,
     CARGS_UNKNOWN_FLAG,
     CARGS_UNKNOWN_SUBCOMMAND,
     CARGS_UNEXPECTED_ARGUMENT,
@@ -80,6 +85,8 @@ CARGSDEF void cargs_string(const char *long_name, const char *short_name, const 
 
 CARGSDEF void cargs_subcommand_start(const char *name, const char *description);
 CARGSDEF void cargs_subcommand_end(void);
+
+CARGSDEF void cargs_positional(const char *name, const char **reference, const char *description);
 
 CARGSDEF void cargs_set_error(cargs_error error, const char *format, ...);
 CARGSDEF cargs_error cargs_get_error(void);
@@ -134,6 +141,14 @@ struct cargs_subcommand {
     struct cargs_subcommand *parent;
     struct cargs_subcommand *children_head;
     struct cargs_flag *flags_head;
+    struct cargs_positional *positionals_head;
+};
+
+struct cargs_positional {
+    struct cargs_positional *next;
+    const char *name;
+    const char **reference;
+    const char *description;
 };
 
 static struct cargs_state {
@@ -143,6 +158,7 @@ static struct cargs_state {
     struct cargs_flag *global_flags_head;
     struct cargs_subcommand *root_subcommands_head;
     struct cargs_subcommand *current_subcommand;
+    struct cargs_positional *global_positionals_head;
 
     // Static memory pools
     struct cargs_flag flag_pool[CARGS_MAX_FLAGS];
@@ -150,6 +166,9 @@ static struct cargs_state {
 
     struct cargs_subcommand subcommand_pool[CARGS_MAX_SUBCOMMANDS];
     size_t subcommands_allocated;
+
+    struct cargs_positional positional_pool[CARGS_MAX_POSITIONALS];
+    size_t positionals_allocated;
 
     cargs_error error;
     char error_message[CARGS_MAX_ERROR_LEN];
@@ -172,6 +191,7 @@ CARGSDEF void cargs__panic_func(const char *file, int line, const char *message,
 #define cargs__panic(message, ...) cargs__panic_func(__FILE__, __LINE__, message, ##__VA_ARGS__)
 CARGSDEF struct cargs_flag **cargs__get_active_flags_head(void);
 CARGSDEF struct cargs_subcommand **cargs__get_active_subcommands_head(void);
+CARGSDEF struct cargs_positional **cargs__get_active_positionals_head(void);
 CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, const char *short_name);
 CARGSDEF int cargs__evaluate_long_flag(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state);
 CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state);
@@ -180,6 +200,7 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
 CARGSDEF void cargs__print_help_prefix(FILE *stream, struct cargs_subcommand *cmd);
 CARGSDEF void cargs__print_help_commands(FILE *stream, struct cargs_subcommand *children);
 CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags);
+CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positional *pos);
 
 #define CARGS_FLAG(enum_type, function_suffix, type_identifier) \
     void cargs_##function_suffix(const char *long_name, const char *short_name, type_identifier *reference, const type_identifier default_value, const char *argument, validation_func_t *validation_func, const char *description) \
