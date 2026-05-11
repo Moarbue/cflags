@@ -1,5 +1,6 @@
 #define CARGS_MAX_FLAGS 50
 #define CARGS_MAX_SUBCOMMANDS 20
+#define CARGS_MAX_POSITIONALS 20
 #define CARGS_IMPLEMENTATION
 #include "cargs.h"
 
@@ -36,7 +37,7 @@ static int tests_failed = 0;
 
 #define RUN_TEST(name) \
     do { \
-        fprintf(stderr, "RUN  %-30s ", #name); \
+        fprintf(stderr, "RUN  %-35s ", #name); \
         int initial_fails = tests_failed; \
         test_##name(); \
         tests_run++; \
@@ -84,7 +85,6 @@ TEST(type_int_signed)
     int val;
     cargs_int("val", NULL, &val, 0, NULL, NULL, "-");
 
-    ;
     ASSERT(PARSE_MOCK("--val=2147483647") != -1, "Max int");
     ASSERT_EQ_INT(2147483647, val);
 
@@ -184,8 +184,8 @@ TEST(syntax_short_cluster)
 
     ASSERT(PARSE_MOCK("-ab", "-cfval1", "-g", "val2") != -1, "Parse cluster");
     ASSERT(a && b && c, "Booleans true");
-    ASSERT_EQ_STR("val1", str1); // Inline argument parsing
-    ASSERT_EQ_STR("val2", str2); // Next token argument parsing
+    ASSERT_EQ_STR("val1", str1);
+    ASSERT_EQ_STR("val2", str2);
 }
 
 TEST(syntax_prefix_resolution)
@@ -238,14 +238,14 @@ TEST(positional_demarcation)
 
     int res = PARSE_MOCK("--a", "arg1", "cmd");
     ASSERT(res != -1, "Parse");
-    ASSERT_EQ_INT(2, res); // argv[2] == "arg1"
+    ASSERT_EQ_INT(2, res);
     ASSERT(cargs_get_active_subcommand() == NULL, "Subcmd treated as positional");
 
     cargs_reset();
     cargs_bool("a", NULL, &a, false, NULL, NULL, "-");
-    res = PARSE_MOCK("-", "arg2"); // Fix: Supply standard positional token
+    res = PARSE_MOCK("-", "arg2");
     ASSERT(res != -1, "Parse stdin dash");
-    ASSERT_EQ_INT(1, res); // argv[1] == "-"
+    ASSERT_EQ_INT(1, res);
 
     cargs_reset();
     cargs_bool("a", NULL, &a, false, NULL, NULL, "-");
@@ -255,6 +255,53 @@ TEST(positional_demarcation)
     ASSERT(a == false, "--a bypassed");
 }
 
+
+// --- Positional API ---
+
+TEST(mandatory_positionals)
+{
+    cargs_reset();
+    const char *p1 = NULL;
+    const char *p2 = NULL;
+    cargs_positional("p1", &p1, "-");
+    cargs_positional("p2", &p2, "-");
+
+    int res = PARSE_MOCK("v1", "v2", "v3");
+    ASSERT(res != -1, "Parse positionals");
+    ASSERT_EQ_INT(3, res);
+    ASSERT(p1 != NULL && strcmp(p1, "v1") == 0, "p1 extracted");
+    ASSERT(p2 != NULL && strcmp(p2, "v2") == 0, "p2 extracted");
+}
+
+TEST(missing_mandatory_positional)
+{
+    cargs_reset();
+    const char *p1 = NULL;
+    cargs_positional("p1", &p1, "-");
+
+    int res = PARSE_MOCK("--");
+    ASSERT_EQ_INT(-1, res);
+    ASSERT_EQ_INT(CARGS_MISSING_POSITIONAL, cargs_get_error());
+}
+
+TEST(subcommand_positionals)
+{
+    cargs_reset();
+    const char *g1 = NULL;
+    cargs_positional("g1", &g1, "-"); // Defines global mandatory
+
+    const char *s1 = NULL;
+    cargs_subcommand_start("sub", "-");
+        cargs_positional("s1", &s1, "-"); // Defines scope mandatory
+    cargs_subcommand_end();
+
+    // Triggering subcommand scope bypasses global positionals mapping
+    int res = PARSE_MOCK("sub", "sub_val");
+    ASSERT(res != -1, "Parse subcommand mapping");
+    ASSERT(g1 == NULL, "Global positional bypassed");
+    ASSERT(s1 != NULL && strcmp(s1, "sub_val") == 0, "Scope positional extracted");
+    ASSERT_EQ_INT(3, res);
+}
 
 // --- Hooks & State ---
 
@@ -290,11 +337,10 @@ TEST(reset_persistence)
     cargs_bool("a", NULL, &a, false, NULL, NULL, "-");
     int res = PARSE_MOCK("--a");
     ASSERT(res != -1, "Parse");
-    ASSERT(a == true, "a is true"); // Fix: Assert mutation
+    ASSERT(a == true, "a is true");
 
-    cargs_reset(); // Nuke
+    cargs_reset();
 
-    // Ensure 'a' is not recognized
     res = PARSE_MOCK("--a");
     ASSERT_EQ_INT(-1, res);
     ASSERT_EQ_INT(CARGS_UNKNOWN_FLAG, cargs_get_error());
@@ -314,6 +360,9 @@ int main(void)
     RUN_TEST(syntax_prefix_resolution);
     RUN_TEST(scope_isolation);
     RUN_TEST(positional_demarcation);
+    RUN_TEST(mandatory_positionals);
+    RUN_TEST(missing_mandatory_positional);
+    RUN_TEST(subcommand_positionals);
     RUN_TEST(custom_validation);
     RUN_TEST(reset_persistence);
 
