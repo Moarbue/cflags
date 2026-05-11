@@ -587,11 +587,18 @@ CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag *
                 goto finish_cluster;
             }
         } else {
-            // Boolean short flag
-            if (sflag->reference) {
-                *(bool*)sflag->reference = true;
+            // Check for inline boolean explicit assignment (e.g., -b0, -b1)
+            if (*(p + 1) == '0' || *(p + 1) == '1') {
+                if (sflag->reference) {
+                    *(bool*)sflag->reference = (*(p + 1) == '1');
+                }
+                p += 2; // Consume flag and digit
+            } else {
+                if (sflag->reference) {
+                    *(bool*)sflag->reference = true;
+                }
+                p++;
             }
-            p++;
         }
     }
     finish_cluster:
