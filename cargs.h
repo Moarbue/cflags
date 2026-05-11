@@ -316,20 +316,33 @@ CARGSDEF int cargs_parse(int argc, char **argv)
             case STATE_EVALUATE_LONG_FLAG: {
                 token += 2; // skip "--"
                 char *equal_sign = strchr(token, '=');
-                if (equal_sign != NULL) *equal_sign = '\0';
+                size_t name_len = (equal_sign != NULL) ? (size_t)(equal_sign - token) : strlen(token);
 
-                // Look up flag in current scope (global or subcommand)
+                // Look up flag in current scope using exact length match
                 struct cargs_flag **flag_head = cargs_state.current_subcommand ?
                     &cargs_state.current_subcommand->flags_head :
                     &cargs_state.global_flags_head;
-                if (!cargs__find_and_set_flag(*flag_head, token, &flag)) {
-                    cargs_set_error(CARGS_UNKNOWN_FLAG, "unknown flag: --%s", token);
+
+                flag = NULL;
+                struct cargs_flag *curr = *flag_head;
+                while (curr != NULL) {
+                    if (curr->long_name &&
+                        strncmp(curr->long_name, token, name_len) == 0 &&
+                        curr->long_name[name_len] == '\0') {
+                        flag = curr;
+                        break;
+                    }
+                    curr = curr->next;
+                }
+
+                if (flag == NULL) {
+                    cargs_set_error(CARGS_UNKNOWN_FLAG, "unknown flag: --%.*s", (int)name_len, token);
                     return -1;
                 }
 
                 if (equal_sign != NULL) {
                     if (flag->argument == NULL) {
-                        cargs_set_error(CARGS_UNEXPECTED_ARGUMENT, "flag --%s does not take an argument", flag->long_name);
+                        cargs_set_error(CARGS_UNEXPECTED_ARGUMENT, "flag --%.*s does not take an argument", (int)name_len, token);
                         return -1;
                     }
                     token = equal_sign + 1;
