@@ -208,6 +208,8 @@ enum CARGS_PARSE_STATE {
 CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char *short_name, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs__panic_func(const char *file, int line, const char *message, ...);
 #define cargs__panic(message, ...) cargs__panic_func(__FILE__, __LINE__, message, ##__VA_ARGS__)
+CARGSDEF bool cargs__is_valid_name_initial_character(char c);
+CARGSDEF bool cargs__is_valid_name_character(char c);
 CARGSDEF struct cargs_flag **cargs__get_active_flags_head(void);
 CARGSDEF struct cargs_subcommand **cargs__get_active_subcommands_head(void);
 CARGSDEF struct cargs_positional **cargs__get_active_positionals_head(void);
@@ -250,7 +252,9 @@ CARGSDEF void cargs_subcommand_start(const char *name, const char *description)
     if (cargs_state.parsed) cargs__panic("arguments already parsed");
     if (cargs_state.subcommands_allocated >= CARGS_MAX_SUBCOMMANDS) cargs__panic("too many subcommands, define bigger CARGS_MAX_SUBCOMMANDS");
     if (name == NULL) cargs__panic("subcommand name cannot be NULL");
-    if (!isalnum(name[0])) cargs__panic("subcommand name must start with an alphanumeric character");
+    if (!cargs__is_valid_name_initial_character(name[0])) cargs__panic("invalid subcommand character: %c", name[0]);
+    for (int i = 1; name[i] != '\0'; i++)
+        if (!cargs__is_valid_name_character(name[i])) cargs__panic("invalid subcommand character: %c", name[i]);
     if (description == NULL) cargs__panic("subcommand description cannot be NULL");
 
     struct cargs_subcommand **head = cargs__get_active_subcommands_head();
@@ -298,6 +302,10 @@ CARGSDEF void cargs_positional(const char *name, const char **reference, const c
     if (cargs_state.parsed) cargs__panic("arguments already parsed");
     if (cargs_state.positionals_allocated >= CARGS_MAX_POSITIONALS) cargs__panic("too many positionals, define bigger CARGS_MAX_POSITIONALS");
     if (name == NULL) cargs__panic("positional name cannot be NULL");
+    if (!cargs__is_valid_name_initial_character(name[0])) cargs__panic("invalid positional character: %c", name[0]);
+    for (int i = 1; name[i] != '\0'; i++)
+        if (!cargs__is_valid_name_character(name[i])) cargs__panic("invalid positional character: %c", name[i]);
+    if (description == NULL) cargs__panic("positional description cannot be NULL");
 
     struct cargs_positional *pos = &cargs_state.positional_pool[cargs_state.positionals_allocated++];
     pos->next = NULL;
@@ -537,11 +545,13 @@ CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const cha
     if (cargs_state.parsed) cargs__panic("arguments already parsed");
     if (cargs_state.flags_allocated >= CARGS_MAX_FLAGS) cargs__panic("too many flags, define bigger CARGS_MAX_FLAGS");
     if (long_name == NULL && short_name == NULL) cargs__panic("flag long_name and short_name cannot both be NULL");
-    if (long_name)
-        for (size_t i = 0; i < strlen(long_name); i++)
-            if (!isalnum(long_name[i])) cargs__panic("flag long_name can only contain alphanumeric characters");
+    if (long_name) {
+        if (!cargs__is_valid_name_initial_character(long_name[0])) cargs__panic("invalid flag character: %c", long_name[0]);
+        for (int i = 1; long_name[i] != '\0'; i++)
+            if (!cargs__is_valid_name_character(long_name[i])) cargs__panic("invalid flag character: %c", long_name[i]);
+    }
     if (short_name && strlen(short_name) != 1) cargs__panic("flag short_name must be a single character");
-    if (short_name && !isalnum(short_name[0])) cargs__panic("flag short_name must be alphanumeric");
+    if (short_name && !cargs__is_valid_name_initial_character(short_name[0])) cargs__panic("invalid flag character: %c", short_name[0]);
     if (description == NULL) cargs__panic("flag description cannot be NULL");
     if (long_name && short_name && strlen(long_name) == 1 && long_name[0] == short_name[0]) cargs__panic("flag long_name and short_name cannot be the same");
 
@@ -581,6 +591,19 @@ CARGSDEF void cargs__panic_func(const char *file, int line, const char *message,
     va_end(args);
     fprintf(stderr, "\n");
     exit(EXIT_FAILURE);
+}
+
+CARGSDEF bool cargs__is_valid_name_initial_character(char c)
+{
+    return isalnum((unsigned char)c) || c == '?';
+}
+
+CARGSDEF bool cargs__is_valid_name_character(char c)
+{
+    return isalnum((unsigned char)c) ||
+        c == '-' ||
+        c == '_' ||
+        c == '.';
 }
 
 CARGSDEF struct cargs_flag **cargs__get_active_flags_head(void)
