@@ -1026,7 +1026,7 @@ CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positiona
     fprintf(stream, "Arguments:\n");
     curr = pos;
     while (curr != NULL) {
-        fprintf(stream, "  <%-*s>  %s\n", max_len - 2, curr->name, curr->description ? curr->description : "");
+        fprintf(stream, "  <%s>  %-*s\n", curr->name, max_len - 2, curr->description ? curr->description : "");
         curr = curr->next;
     }
     fprintf(stream, "\n");
