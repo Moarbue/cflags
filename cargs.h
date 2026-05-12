@@ -207,7 +207,7 @@ enum CARGS_PARSE_STATE {
 
 CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char *short_name, const char *argument, validation_func_t *validation_func, const char *description);
 CARGSDEF void cargs__panic_func(const char *file, int line, const char *message, ...);
-#define cargs__panic(message, ...) cargs__panic_func(__FILE__, __LINE__, message, ##__VA_ARGS__)
+#define cargs__panic(...) cargs__panic_func(__FILE__, __LINE__, __VA_ARGS__)
 CARGSDEF bool cargs__is_valid_name_initial_character(char c);
 CARGSDEF bool cargs__is_valid_name_character(char c);
 CARGSDEF struct cargs_flag **cargs__get_active_flags_head(void);
