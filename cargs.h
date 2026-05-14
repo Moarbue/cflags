@@ -59,7 +59,7 @@ extern "C" {
 #include <stdio.h>
 
 // validation function type, which is called when parsing the argument of a flag
-typedef bool (validation_func_t)(const char *name, const char *value);
+typedef bool (validation_func_t)(const char *name, const void *value);
 
 struct cargs_subcommand;
 
@@ -900,7 +900,7 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
             return false;
     }
 
-    if (flag->validation_func && !flag->validation_func(name, token)) {
+    if (flag->validation_func && !flag->validation_func(name, flag->reference)) {
         return false;
     }
 
