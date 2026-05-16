@@ -30,6 +30,10 @@ SOFTWARE.
 extern "C" {
 #endif
 
+#define CARGS_VERSION_MAJOR 3
+#define CARGS_VERSION_MINOR 0
+#define CARGS_VERSION_PATCH 0
+
 #ifndef CARGS_MAX_FLAGS
 #   error "CARGS_MAX_FLAGS not defined"
 #endif
