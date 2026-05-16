@@ -242,6 +242,7 @@ CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positiona
 #define CARGS_FLAG(enum_type, function_suffix, type_identifier, format_string) \
     void cargs_##function_suffix(const char *long_name, const char *short_name, type_identifier *reference, const type_identifier default_value, const char *argument, validation_func_t *validation_func, const char *description) \
     { \
+        if (reference == NULL) cargs__panic("reference must not be NULL"); \
         struct cargs_flag *flag = cargs__new_flag(enum_type, long_name, short_name, argument, validation_func, description); \
         flag->reference = reference; \
         *reference = (type_identifier)default_value; \
@@ -258,6 +259,7 @@ CARGS_FLAG(CARGS_FLAG_TYPE_DOUBLE, double, double, "%lf")
 CARGS_FLAG(CARGS_FLAG_TYPE_CHAR, char, char, "%c")
 CARGSDEF void cargs_bool(const char *long_name, const char *short_name, bool *reference, bool default_value, const char *argument, validation_func_t *validation_func, const char *description)
 {
+    if (reference == NULL) cargs__panic("reference must not be NULL");
     struct cargs_flag *flag = cargs__new_flag(CARGS_FLAG_TYPE_BOOL, long_name, short_name, argument, validation_func, description);
     flag->reference = reference;
     *reference = default_value;
@@ -265,6 +267,7 @@ CARGSDEF void cargs_bool(const char *long_name, const char *short_name, bool *re
 }
 CARGSDEF void cargs_string(const char *long_name, const char *short_name, const char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description)
 {
+    if (reference == NULL) cargs__panic("reference must not be NULL");
     struct cargs_flag *flag = cargs__new_flag(CARGS_FLAG_TYPE_STRING, long_name, short_name, argument, validation_func, description);
     flag->reference = reference;
     *reference = default_value;
