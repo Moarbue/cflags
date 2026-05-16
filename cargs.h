@@ -553,7 +553,6 @@ CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const cha
     if (short_name && strlen(short_name) != 1) cargs__panic("flag short_name must be a single character");
     if (short_name && !cargs__is_valid_name_initial_character(short_name[0])) cargs__panic("invalid flag character: %c", short_name[0]);
     if (description == NULL) cargs__panic("flag description cannot be NULL");
-    if (long_name && short_name && strlen(long_name) == 1 && long_name[0] == short_name[0]) cargs__panic("flag long_name and short_name cannot be the same");
 
     struct cargs_flag **head = cargs__get_active_flags_head();
     cargs__check_duplicate_flags(*head, long_name, short_name);
