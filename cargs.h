@@ -50,6 +50,10 @@ extern "C" {
 #   define CARGS_MAX_DEFAULT_VALUE_LEN 64
 #endif
 
+#ifndef CARGS_HELP_WIDTH
+#   define CARGS_HELP_WIDTH 80
+#endif
+
 #ifndef CARGSDEF
 #   ifdef CARGS_STATIC
 #       define CARGSDEF static
@@ -224,6 +228,7 @@ CARGSDEF int cargs__evaluate_long_flag(char **token_ptr, struct cargs_flag **out
 CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state);
 CARGSDEF bool cargs__find_short_flag(struct cargs_flag *head, char short_name, struct cargs_flag **flag);
 CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token);
+CARGSDEF void cargs__print_wrapped(FILE *stream, const char *text, int indent, int width);
 CARGSDEF void cargs__print_help_prefix(FILE *stream, struct cargs_subcommand *cmd);
 CARGSDEF void cargs__print_help_commands(FILE *stream, struct cargs_subcommand *children);
 CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags);
@@ -917,6 +922,51 @@ CARGSDEF bool cargs__parse_flag_value(struct cargs_flag *flag, const char *token
     return true;
 }
 
+CARGSDEF void cargs__print_wrapped(FILE *stream, const char *text, int indent, int width)
+{
+    if (!text) return;
+    const char *p = text;
+    int col = indent;
+    bool first = true;
+    while (*p) {
+        // skip spaces (but not newlines)
+        while (*p == ' ') p++;
+        if (*p == '\0') break;
+
+        // explicit newline – force a line break
+        if (*p == '\n') {
+            fprintf(stream, "\n%*s", indent, "");
+            col = indent;
+            first = true;
+            p++;
+            continue;
+        }
+
+        // extract next word
+        const char *end = p;
+        while (*end != ' ' && *end != '\n' && *end != '\0') end++;
+        size_t word_len = end - p;
+
+        // decide if we need a space before this word (unless it's the very first)
+        if (!first) {
+            if (col + 1 + (int)word_len > width) {
+                fprintf(stream, "\n%*s", indent, "");
+                col = indent;
+                first = true;  // treat as first word on new line (no space before it)
+            } else {
+                fprintf(stream, " ");
+                col++;
+            }
+        }
+
+        // print the word
+        fprintf(stream, "%.*s", (int)word_len, p);
+        col += (int)word_len;
+        first = false;
+        p = end;
+    }
+}
+
 CARGSDEF void cargs__print_help_prefix(FILE *stream, struct cargs_subcommand *cmd)
 {
     fprintf(stream, "Usage: %s", cargs_state.program_name ? cargs_state.program_name : "program");
@@ -962,10 +1012,14 @@ CARGSDEF void cargs__print_help_commands(FILE *stream, struct cargs_subcommand *
         curr = curr->next;
     }
 
+    int indent = max_cmd_len + 4;   // 2 spaces + name field + 2 spaces
+
     fprintf(stream, "Commands:\n");
     curr = children;
     while (curr != NULL) {
-        fprintf(stream, "  %-*s  %s\n", max_cmd_len, curr->name, curr->description);
+        fprintf(stream, "  %-*s  ", max_cmd_len, curr->name);
+        cargs__print_wrapped(stream, curr->description, indent, CARGS_HELP_WIDTH);
+        fprintf(stream, "\n");
         curr = curr->next;
     }
     fprintf(stream, "\n");
@@ -988,6 +1042,8 @@ CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags)
         if (len > max_flag_len) max_flag_len = len;
         curr = curr->next;
     }
+
+    int indent = 2 + max_flag_len;   // leading "  " + flag spec field
 
     fprintf(stream, "Options:\n");
     curr = flags;
@@ -1015,9 +1071,12 @@ CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags)
 
         int pad = max_flag_len - cur_len;
         if (pad < 0) pad = 0;
-        fprintf(stream, "%*s%s", pad, "", curr->description);
-        if (curr->default_value[0] != '\0') {
-            fprintf(stream, " [default: %s]", curr->default_value);
+        fprintf(stream, "%*s", pad, "");   // padding, no trailing space
+
+        // now we are exactly at column 'indent'
+        cargs__print_wrapped(stream, curr->description, indent, CARGS_HELP_WIDTH);
+        if (curr->default_str[0] != '\0') {
+            fprintf(stream, " [default: %s]", curr->default_str);
         }
         fprintf(stream, "\n");
 
@@ -1030,18 +1089,22 @@ CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positiona
 {
     if (pos == NULL) return;
 
-    int max_len = 0;
+    int max_name_len = 0;
     struct cargs_positional *curr = pos;
     while (curr != NULL) {
-        int len = strlen(curr->name) + 2;
-        if (len > max_len) max_len = len;
+        int len = strlen(curr->name);
+        if (len > max_name_len) max_name_len = len;
         curr = curr->next;
     }
+
+    int indent = max_name_len + 6;   // "  <" + name field + ">  "
 
     fprintf(stream, "Arguments:\n");
     curr = pos;
     while (curr != NULL) {
-        fprintf(stream, "  <%s>  %-*s\n", curr->name, max_len - 2, curr->description ? curr->description : "");
+        fprintf(stream, "  <%-*s>  ", max_name_len, curr->name);
+        cargs__print_wrapped(stream, curr->description ? curr->description : "", indent, CARGS_HELP_WIDTH);
+        fprintf(stream, "\n");
         curr = curr->next;
     }
     fprintf(stream, "\n");
