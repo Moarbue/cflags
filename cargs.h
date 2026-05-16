@@ -106,7 +106,8 @@ CARGSDEF void cargs_string(const char *long_name, const char *short_name, const 
 CARGSDEF void cargs_subcommand_start(const char *name, const char *description);
 CARGSDEF void cargs_subcommand_end(void);
 
-CARGSDEF void cargs_positional(const char *name, const char **reference, const char *description);
+CARGSDEF void cargs_mandatory_positional(const char *name, const char **reference, const char *description);
+CARGSDEF void cargs_optional_positional(const char *name, const char **reference, const char *default_value, const char *description);
 
 CARGSDEF void cargs_set_error(cargs_error error, const char *format, ...);
 CARGSDEF cargs_error cargs_get_error(void);
@@ -178,6 +179,8 @@ struct cargs_positional {
     const char *name;
     const char **reference;
     const char *description;
+    bool optional;
+    const char *default_value;   // NULL for mandatory, used if missing
 };
 
 static struct cargs_state {
@@ -316,7 +319,7 @@ CARGSDEF void cargs_subcommand_end(void)
     cargs_state.current_subcommand = cargs_state.current_subcommand->parent;
 }
 
-CARGSDEF void cargs_positional(const char *name, const char **reference, const char *description)
+CARGSDEF void cargs_mandatory_positional(const char *name, const char **reference, const char *description)
 {
     if (cargs_state.parsed) cargs__panic("arguments already parsed");
     if (cargs_state.positionals_allocated >= CARGS_MAX_POSITIONALS) cargs__panic("too many positionals, define bigger CARGS_MAX_POSITIONALS");
@@ -326,13 +329,55 @@ CARGSDEF void cargs_positional(const char *name, const char **reference, const c
         if (!cargs__is_valid_name_character(name[i])) cargs__panic("invalid positional character: %c", name[i]);
     if (description == NULL) cargs__panic("positional description cannot be NULL");
 
+    struct cargs_positional **head = cargs__get_active_positionals_head();
+
+    // Enforce: mandatory must not follow optional
+    if (*head != NULL) {
+        struct cargs_positional *last = *head;
+        while (last->next != NULL) last = last->next;
+        if (last->optional)
+            cargs__panic("mandatory positional '%s' cannot follow optional positional", name);
+    }
+
     struct cargs_positional *pos = &cargs_state.positional_pool[cargs_state.positionals_allocated++];
     pos->next = NULL;
     pos->name = name;
     pos->reference = reference;
     pos->description = description;
+    pos->optional = false;
+    pos->default_value = NULL;
+
+    if (*head == NULL) {
+        *head = pos;
+    } else {
+        struct cargs_positional *curr = *head;
+        while (curr->next != NULL) curr = curr->next;
+        curr->next = pos;
+    }
+}
+
+CARGSDEF void cargs_optional_positional(const char *name, const char **reference, const char *default_value, const char *description)
+{
+    if (cargs_state.parsed) cargs__panic("arguments already parsed");
+    if (cargs_state.positionals_allocated >= CARGS_MAX_POSITIONALS) cargs__panic("too many positionals, define bigger CARGS_MAX_POSITIONALS");
+    if (name == NULL) cargs__panic("positional name cannot be NULL");
+    if (!cargs__is_valid_name_initial_character(name[0])) cargs__panic("invalid positional character: %c", name[0]);
+    for (int i = 1; name[i] != '\0'; i++)
+        if (!cargs__is_valid_name_character(name[i])) cargs__panic("invalid positional character: %c", name[i]);
+    if (description == NULL) cargs__panic("positional description cannot be NULL");
+    // default_value may be NULL (meaning empty string) but we'll treat it as "(no default)" or similar
+    // It's safe to allow NULL, we can use a sentinel in the reference.
 
     struct cargs_positional **head = cargs__get_active_positionals_head();
+
+    struct cargs_positional *pos = &cargs_state.positional_pool[cargs_state.positionals_allocated++];
+    pos->next = NULL;
+    pos->name = name;
+    pos->reference = reference;
+    pos->description = description;
+    pos->optional = true;
+    pos->default_value = default_value;   // can be NULL
+
     if (*head == NULL) {
         *head = pos;
     } else {
@@ -490,16 +535,24 @@ CARGSDEF int cargs_parse(int argc, char **argv)
     struct cargs_positional *expected_pos = *cargs__get_active_positionals_head();
 
     while (expected_pos != NULL) {
-        if (current_pos_idx >= argc) {
-            cargs_set_error(CARGS_MISSING_POSITIONAL, "missing mandatory argument <%s>", expected_pos->name);
-            return -1;
+        if (current_pos_idx < argc) {
+            // Argument provided
+            if (expected_pos->reference) {
+                *(expected_pos->reference) = argv[current_pos_idx];
+            }
+            current_pos_idx++;
+        } else {
+            // No more arguments
+            if (!expected_pos->optional) {
+                cargs_set_error(CARGS_MISSING_POSITIONAL, "missing mandatory argument <%s>", expected_pos->name);
+                return -1;
+            } else {
+                // Optional with default
+                if (expected_pos->reference) {
+                    *(expected_pos->reference) = expected_pos->default_value;
+                }
+            }
         }
-
-        if (expected_pos->reference) {
-            *(expected_pos->reference) = argv[current_pos_idx];
-        }
-
-        current_pos_idx++;
         expected_pos = expected_pos->next;
     }
 
@@ -987,7 +1040,10 @@ CARGSDEF void cargs__print_help_prefix(FILE *stream, struct cargs_subcommand *cm
 
     struct cargs_positional *pos = cmd ? cmd->positionals_head : cargs_state.global_positionals_head;
     while (pos != NULL) {
-        fprintf(stream, " <%s>", pos->name);
+        if (pos->optional)
+            fprintf(stream, " [%s]", pos->name);
+        else
+            fprintf(stream, " <%s>", pos->name);
         pos = pos->next;
     }
 
@@ -1097,13 +1153,20 @@ CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positiona
         curr = curr->next;
     }
 
-    int indent = max_name_len + 6;   // "  <" + name field + ">  "
+    int indent = max_name_len + 6;   // "  <" or "  [" + name + ">  " or "]  "
 
     fprintf(stream, "Arguments:\n");
     curr = pos;
     while (curr != NULL) {
-        fprintf(stream, "  <%-*s>  ", max_name_len, curr->name);
+        if (curr->optional)
+            fprintf(stream, "  [%-*s]  ", max_name_len, curr->name);
+        else
+            fprintf(stream, "  <%-*s>  ", max_name_len, curr->name);
+
         cargs__print_wrapped(stream, curr->description ? curr->description : "", indent, CARGS_HELP_WIDTH);
+        if (curr->optional && curr->default_value != NULL) {
+            fprintf(stream, " [default: %s]", curr->default_value);
+        }
         fprintf(stream, "\n");
         curr = curr->next;
     }
