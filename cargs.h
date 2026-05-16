@@ -46,6 +46,10 @@ extern "C" {
 #   define CARGS_MAX_ERROR_LEN 512
 #endif
 
+#ifndef CARGS_MAX_DEFAULT_VALUE_LEN
+#   define CARGS_MAX_DEFAULT_VALUE_LEN 64
+#endif
+
 #ifndef CARGSDEF
 #   ifdef CARGS_STATIC
 #       define CARGSDEF static
@@ -123,6 +127,7 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd);
 
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -149,6 +154,7 @@ struct cargs_flag {
     const char *short_name;
     void *reference;
     const char *argument;
+    const char default_str[CARGS_MAX_DEFAULT_VALUE_LEN];
     validation_func_t *validation_func;
     const char *description;
 };
@@ -223,28 +229,36 @@ CARGSDEF void cargs__print_help_commands(FILE *stream, struct cargs_subcommand *
 CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags);
 CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positional *pos);
 
-#define CARGS_FLAG(enum_type, function_suffix, type_identifier) \
+#define CARGS_FLAG(enum_type, function_suffix, type_identifier, format_string) \
     void cargs_##function_suffix(const char *long_name, const char *short_name, type_identifier *reference, const type_identifier default_value, const char *argument, validation_func_t *validation_func, const char *description) \
     { \
         struct cargs_flag *flag = cargs__new_flag(enum_type, long_name, short_name, argument, validation_func, description); \
         flag->reference = reference; \
         *reference = (type_identifier)default_value; \
+        snprintf(flag->default_str, CARGS_MAX_DEFAULT_VALUE_LEN, format_string, default_value);
     }
 
-CARGS_FLAG(CARGS_FLAG_TYPE_INT, int, int)
-CARGS_FLAG(CARGS_FLAG_TYPE_UINT, uint, unsigned int)
-CARGS_FLAG(CARGS_FLAG_TYPE_INT64, int64, int64_t)
-CARGS_FLAG(CARGS_FLAG_TYPE_UINT64, uint64, uint64_t)
-CARGS_FLAG(CARGS_FLAG_TYPE_SIZE, size, size_t)
-CARGS_FLAG(CARGS_FLAG_TYPE_BOOL, bool, bool)
-CARGS_FLAG(CARGS_FLAG_TYPE_FLOAT, float, float)
-CARGS_FLAG(CARGS_FLAG_TYPE_DOUBLE, double, double)
-CARGS_FLAG(CARGS_FLAG_TYPE_CHAR, char, char)
+CARGS_FLAG(CARGS_FLAG_TYPE_INT, int, int, "%d")
+CARGS_FLAG(CARGS_FLAG_TYPE_UINT, uint, unsigned int, "%u")
+CARGS_FLAG(CARGS_FLAG_TYPE_INT64, int64, int64_t, "%" PRIi64)
+CARGS_FLAG(CARGS_FLAG_TYPE_UINT64, uint64, uint64_t, "%" PRIu64)
+CARGS_FLAG(CARGS_FLAG_TYPE_SIZE, size, size_t, "%zu")
+CARGS_FLAG(CARGS_FLAG_TYPE_FLOAT, float, float, "%f")
+CARGS_FLAG(CARGS_FLAG_TYPE_DOUBLE, double, double, "%lf")
+CARGS_FLAG(CARGS_FLAG_TYPE_CHAR, char, char, "%c")
+CARGSDEF void cargs_bool(const char *long_name, const char *short_name, bool *reference, bool default_value, const char *argument, validation_func_t *validation_func, const char *description)
+{
+    struct cargs_flag *flag = cargs__new_flag(CARGS_FLAG_TYPE_BOOL, long_name, short_name, argument, validation_func, description);
+    flag->reference = reference;
+    *reference = default_value;
+    snprintf(flag->default_str, CARGS_MAX_DEFAULT_VALUE_LEN, "%s", default_value ? "true" : "false");
+}
 CARGSDEF void cargs_string(const char *long_name, const char *short_name, const char **reference, const char *default_value, const char *argument, validation_func_t *validation_func, const char *description)
 {
     struct cargs_flag *flag = cargs__new_flag(CARGS_FLAG_TYPE_STRING, long_name, short_name, argument, validation_func, description);
     flag->reference = reference;
     *reference = default_value;
+    snprintf(flag->default_str, sizeof(flag->default_str), "%s", default_value ? default_value : "(null)");
 }
 
 CARGSDEF void cargs_subcommand_start(const char *name, const char *description)
@@ -1000,7 +1014,12 @@ CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags)
         }
 
         int pad = max_flag_len - cur_len;
-        fprintf(stream, "%*s%s\n", pad, "", curr->description);
+        if (pad < 0) pad = 0;
+        fprintf(stream, "%*s%s", pad, "", curr->description);
+        if (curr->default_value[0] != '\0') {
+            fprintf(stream, " [default: %s]", curr->default_value);
+        }
+        fprintf(stream, "\n");
 
         curr = curr->next;
     }
