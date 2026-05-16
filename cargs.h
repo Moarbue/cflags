@@ -555,10 +555,8 @@ CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const cha
     if (description == NULL) cargs__panic("flag description cannot be NULL");
     if (long_name && short_name && strlen(long_name) == 1 && long_name[0] == short_name[0]) cargs__panic("flag long_name and short_name cannot be the same");
 
-    if (cargs_state.current_subcommand != NULL) {
-        // check for duplicate flag names in current scope
-        cargs__check_duplicate_flags(cargs_state.current_subcommand->flags_head, long_name, short_name);
-    }
+    struct cargs_flag **head = cargs__get_active_flags_head();
+    cargs__check_duplicate_flags(*head, long_name, short_name);
 
     // create new flag
     struct cargs_flag *flag = &cargs_state.flag_pool[cargs_state.flags_allocated++];
@@ -571,7 +569,6 @@ CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const cha
     flag->description = description;
 
     // append flag to linked list
-    struct cargs_flag **head = cargs__get_active_flags_head();
     if (*head == NULL) *head = flag; // list is empty
     else {
         struct cargs_flag *curr = *head;
