@@ -1159,16 +1159,22 @@ CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positiona
         curr = curr->next;
     }
 
-    int indent = max_name_len + 6;   // "  <" or "  [" + name + ">  " or "]  "
+    // indent = "  <" + max_name_len + ">  " = 2 + 1 + max_name_len + 2 + 1 = max_name_len + 6
+    int indent = max_name_len + 6;
 
     fprintf(stream, "Arguments:\n");
     curr = pos;
     while (curr != NULL) {
-        if (curr->optional)
-            fprintf(stream, "  [%-*s]  ", max_name_len, curr->name);
-        else
-            fprintf(stream, "  <%-*s>  ", max_name_len, curr->name);
-
+        int name_len = strlen(curr->name);
+        char open = curr->optional ? '[' : '<';
+        char close = curr->optional ? ']' : '>';
+        // Print "  <name>  " (or "[...]") with no internal padding
+        fprintf(stream, "  %c%s%c  ", open, curr->name, close);
+        // Pad with spaces so that description starts at column 'indent'
+        int pad = max_name_len - name_len;  // (max_name_len+6) - (name_len+6) = max_name_len - name_len
+        if (pad > 0) {
+            fprintf(stream, "%*s", pad, "");
+        }
         cargs__print_wrapped(stream, curr->description ? curr->description : "", indent, CARGS_HELP_WIDTH);
         if (cargs_state.show_defaults && curr->optional && curr->default_value != NULL) {
             fprintf(stream, " [default: %s]", curr->default_value);
