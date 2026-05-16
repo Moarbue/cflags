@@ -154,7 +154,7 @@ struct cargs_flag {
     const char *short_name;
     void *reference;
     const char *argument;
-    const char default_str[CARGS_MAX_DEFAULT_VALUE_LEN];
+    char default_str[CARGS_MAX_DEFAULT_VALUE_LEN];
     validation_func_t *validation_func;
     const char *description;
 };
@@ -235,7 +235,7 @@ CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positiona
         struct cargs_flag *flag = cargs__new_flag(enum_type, long_name, short_name, argument, validation_func, description); \
         flag->reference = reference; \
         *reference = (type_identifier)default_value; \
-        snprintf(flag->default_str, CARGS_MAX_DEFAULT_VALUE_LEN, format_string, default_value);
+        snprintf(flag->default_str, CARGS_MAX_DEFAULT_VALUE_LEN, format_string, default_value); \
     }
 
 CARGS_FLAG(CARGS_FLAG_TYPE_INT, int, int, "%d")
