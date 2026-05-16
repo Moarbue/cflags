@@ -31,13 +31,16 @@ static int tests_failed = 0;
     ASSERT(fabs((expected) - (actual)) < 0.0001, "Float mismatch")
 
 #define ASSERT_EQ_STR(expected, actual) \
-    ASSERT(strcmp((expected), (actual)) == 0, "String mismatch")
+    ASSERT(actual != NULL && strcmp((expected), (actual)) == 0, "String mismatch")
+
+#define ASSERT_NULL(ptr) \
+    ASSERT((ptr) == NULL, "Expected NULL pointer")
 
 #define TEST(name) static void test_##name(void)
 
 #define RUN_TEST(name) \
     do { \
-        fprintf(stderr, "RUN  %-35s ", #name); \
+        fprintf(stderr, "RUN  %-40s ", #name); \
         int initial_fails = tests_failed; \
         test_##name(); \
         tests_run++; \
@@ -48,7 +51,8 @@ static int tests_failed = 0;
     } while(0)
 
 #define PARSE_MOCK(...) \
-    cargs_parse(sizeof((char *[]){"test_bin", __VA_ARGS__}) / sizeof(char *), (char *[]){"test_bin", __VA_ARGS__})
+    cargs_parse(sizeof((char *[]){"test_bin", __VA_ARGS__}) / sizeof(char *), \
+                (char *[]){"test_bin", __VA_ARGS__})
 
 
 // --- Data Type Parsing & Boundaries ---
@@ -262,16 +266,34 @@ TEST(syntax_short_cluster)
     ASSERT_EQ_STR("val2", str2);
 }
 
-TEST(syntax_prefix_resolution)
+TEST(syntax_exact_flag_match)
 {
     cargs_reset();
     bool verb, verbose;
     cargs_bool("verb", NULL, &verb, false, NULL, NULL, "-");
     cargs_bool("verbose", NULL, &verbose, false, NULL, NULL, "-");
 
-    ASSERT(PARSE_MOCK("--verb") != -1, "Prefix isolate");
+    ASSERT(PARSE_MOCK("--verb") != -1, "Exact match");
     ASSERT(verb == true, "Verb true");
     ASSERT(verbose == false, "Verbose false");
+}
+
+TEST(syntax_short_flag_only)
+{
+    cargs_reset();
+    bool f;
+    cargs_bool(NULL, "f", &f, false, NULL, NULL, "-");
+    ASSERT(PARSE_MOCK("-f") != -1, "Short only flag works");
+    ASSERT(f == true, "f true");
+}
+
+TEST(syntax_long_flag_only)
+{
+    cargs_reset();
+    bool f;
+    cargs_bool("flag", NULL, &f, false, NULL, NULL, "-");
+    ASSERT(PARSE_MOCK("--flag") != -1, "Long only flag works");
+    ASSERT(f == true, "f true");
 }
 
 
@@ -308,8 +330,6 @@ TEST(positional_demarcation)
     bool a;
     cargs_bool("a", NULL, &a, false, NULL, NULL, "-");
 
-    cargs_subcommand_start("cmd", "-"); cargs_subcommand_end();
-
     int res = PARSE_MOCK("--a", "arg1", "cmd");
     ASSERT(res != -1, "Parse");
     ASSERT_EQ_INT(2, res);
@@ -330,15 +350,15 @@ TEST(positional_demarcation)
 }
 
 
-// --- Positional API ---
+// --- Positional Arguments (Updated API) ---
 
 TEST(mandatory_positionals)
 {
     cargs_reset();
     const char *p1 = NULL;
     const char *p2 = NULL;
-    cargs_positional("p1", &p1, "-");
-    cargs_positional("p2", &p2, "-");
+    cargs_mandatory_positional("p1", &p1, "-");
+    cargs_mandatory_positional("p2", &p2, "-");
 
     int res = PARSE_MOCK("v1", "v2", "v3");
     ASSERT(res != -1, "Parse positionals");
@@ -351,37 +371,88 @@ TEST(missing_mandatory_positional)
 {
     cargs_reset();
     const char *p1 = NULL;
-    cargs_positional("p1", &p1, "-");
+    cargs_mandatory_positional("p1", &p1, "-");
 
     int res = PARSE_MOCK("--");
     ASSERT_EQ_INT(-1, res);
     ASSERT_EQ_INT(CARGS_MISSING_POSITIONAL, cargs_get_error());
 }
 
+TEST(optional_positionals)
+{
+    cargs_reset();
+    const char *p1 = NULL;
+    const char *p2 = NULL;
+    cargs_mandatory_positional("p1", &p1, "-");
+    cargs_optional_positional("p2", &p2, "default2", "-");
+
+    // Provide both arguments
+    int res = PARSE_MOCK("v1", "v2");
+    ASSERT(res != -1, "Parse with both");
+    ASSERT_EQ_STR("v1", p1);
+    ASSERT_EQ_STR("v2", p2);
+
+    // Only mandatory, optional should get default
+    cargs_reset();
+    p1 = p2 = NULL;
+    cargs_mandatory_positional("p1", &p1, "-");
+    cargs_optional_positional("p2", &p2, "default2", "-");
+    res = PARSE_MOCK("v1");
+    ASSERT(res != -1, "Parse with only mandatory");
+    ASSERT_EQ_STR("v1", p1);
+    ASSERT_EQ_STR("default2", p2);
+}
+
+TEST(optional_positional_null_default)
+{
+    cargs_reset();
+    const char *p = (const char *)0xdeadbeef; // some non-NULL sentinel
+    cargs_optional_positional("opt", &p, NULL, "-");
+    int res = PARSE_MOCK("--"); // no positional
+    ASSERT(res != -1, "Parse none");
+    ASSERT_NULL(p); // should be set to NULL
+}
+
+TEST(optional_positionals_mixed_order)
+{
+    cargs_reset();
+    const char *m1, *o1, *o2;
+    cargs_mandatory_positional("m1", &m1, "-");
+    cargs_optional_positional("o1", &o1, "def1", "-");
+    cargs_optional_positional("o2", &o2, "def2", "-");
+
+    int res = PARSE_MOCK("val1", "val2");
+    ASSERT(res != -1, "Parse two args");
+    ASSERT_EQ_STR("val1", m1);
+    ASSERT_EQ_STR("val2", o1);
+    ASSERT_EQ_STR("def2", o2); // o2 gets default
+}
+
 TEST(subcommand_positionals)
 {
     cargs_reset();
     const char *g1 = NULL;
-    cargs_positional("g1", &g1, "-"); // Defines global mandatory
+    cargs_mandatory_positional("g1", &g1, "-"); // Global mandatory
 
     const char *s1 = NULL;
     cargs_subcommand_start("sub", "-");
-        cargs_positional("s1", &s1, "-"); // Defines scope mandatory
+        cargs_mandatory_positional("s1", &s1, "-");
     cargs_subcommand_end();
 
-    // Triggering subcommand scope bypasses global positionals mapping
     int res = PARSE_MOCK("sub", "sub_val");
     ASSERT(res != -1, "Parse subcommand mapping");
-    ASSERT(g1 == NULL, "Global positional bypassed");
-    ASSERT(s1 != NULL && strcmp(s1, "sub_val") == 0, "Scope positional extracted");
+    ASSERT_NULL(g1); // Global positional should not be set
+    ASSERT_EQ_STR("sub_val", s1);
     ASSERT_EQ_INT(3, res);
 }
 
+
 // --- Hooks & State ---
 
-static bool mock_validator(const char *name, const char *value) {
+static bool mock_validator(const char *name, const void *value) {
     (void)name;
-    if (strcmp(value, "reject") == 0) {
+    const char *str_value = *(const char **)value;
+    if (strcmp(str_value, "reject") == 0) {
         cargs_set_error(CARGS_INVALID_ARGUMENT, "validation rejected");
         return false;
     }
@@ -420,6 +491,55 @@ TEST(reset_persistence)
     ASSERT_EQ_INT(CARGS_UNKNOWN_FLAG, cargs_get_error());
 }
 
+TEST(show_defaults_toggle)
+{
+    cargs_reset();
+    cargs_set_show_defaults(false);
+    bool dummy;
+    cargs_bool("flag", NULL, &dummy, false, NULL, NULL, "-");
+    int res = PARSE_MOCK("--flag");
+    ASSERT(res != -1, "Parse with dummy reference should succeed");
+    cargs_set_show_defaults(true);
+}
+
+TEST(get_active_subcommand)
+{
+    cargs_reset();
+    cargs_subcommand_start("base", "-");
+    ASSERT(cargs_get_active_subcommand() != NULL, "Active subcommand exists");
+    cargs_subcommand_end();
+    ASSERT(cargs_get_active_subcommand() == NULL, "Active subcommand cleared");
+}
+
+TEST(get_subcommand)
+{
+    cargs_reset();
+    cargs_subcommand_start("top", "-");
+        cargs_subcommand_start("leaf", "-");
+        cargs_subcommand_end();
+    cargs_subcommand_end();
+
+    // query
+    struct cargs_subcommand *top = cargs_get_subcommand(NULL, "top");
+    ASSERT(top != NULL, "Found top");
+    ASSERT(strcmp(top->name, "top") == 0, "Name matches");
+
+    struct cargs_subcommand *leaf = cargs_get_subcommand(top, "leaf");
+    ASSERT(leaf != NULL, "Found leaf");
+    ASSERT(strcmp(leaf->name, "leaf") == 0, "Leaf name");
+}
+
+TEST(error_message_retrieval)
+{
+    cargs_reset();
+    int dummy;
+    cargs_int("val", NULL, &dummy, 0, NULL, NULL, "-");
+    PARSE_MOCK("--val=abc");
+    ASSERT(cargs_get_error() != CARGS_OK, "Error set");
+    const char *msg = cargs_get_error_message();
+    ASSERT(msg != NULL && strlen(msg) > 0, "Error message non-empty");
+}
+
 // --- Execution ---
 
 int main(void)
@@ -433,16 +553,29 @@ int main(void)
     RUN_TEST(type_float);
     RUN_TEST(type_double);
     RUN_TEST(type_char_and_string);
+
     RUN_TEST(syntax_long_assignment);
     RUN_TEST(syntax_short_cluster);
-    RUN_TEST(syntax_prefix_resolution);
+    RUN_TEST(syntax_exact_flag_match);
+    RUN_TEST(syntax_short_flag_only);
+    RUN_TEST(syntax_long_flag_only);
+
     RUN_TEST(scope_isolation);
     RUN_TEST(positional_demarcation);
+
     RUN_TEST(mandatory_positionals);
     RUN_TEST(missing_mandatory_positional);
+    RUN_TEST(optional_positionals);
+    RUN_TEST(optional_positional_null_default);
+    RUN_TEST(optional_positionals_mixed_order);
     RUN_TEST(subcommand_positionals);
+
     RUN_TEST(custom_validation);
     RUN_TEST(reset_persistence);
+    RUN_TEST(show_defaults_toggle);
+    RUN_TEST(get_active_subcommand);
+    RUN_TEST(get_subcommand);
+    RUN_TEST(error_message_retrieval);
 
     fprintf(stderr, "\nPass: %d | Fail: %d\n", tests_passed, tests_failed);
     return tests_failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
