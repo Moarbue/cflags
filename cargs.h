@@ -121,6 +121,7 @@ CARGSDEF void cargs_reset(void);
 CARGSDEF struct cargs_subcommand *cargs_get_active_subcommand(void);
 CARGSDEF struct cargs_subcommand *cargs_get_subcommand(struct cargs_subcommand *parent, const char *name);
 CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd);
+CARGSDEF void cargs_set_show_defaults(bool show);
 
 #ifdef __cplusplus
 }
@@ -205,6 +206,7 @@ static struct cargs_state {
     cargs_error error;
     char error_message[CARGS_MAX_ERROR_LEN];
     bool parsed;
+    bool show_defaults;
 } cargs_state = {0};
 
 enum CARGS_PARSE_STATE {
@@ -610,6 +612,10 @@ CARGSDEF void cargs_print_help(FILE *stream, struct cargs_subcommand *cmd)
     cargs__print_help_options(stream, flags);
 }
 
+CARGSDEF void cargs_set_show_defaults(bool show)
+{
+    cargs_state.show_defaults = show;
+}
 
 
 CARGSDEF struct cargs_flag *cargs__new_flag(enum cargs_flag_type type, const char *long_name, const char *short_name, const char *argument, validation_func_t *validation_func, const char *description)
@@ -1131,7 +1137,7 @@ CARGSDEF void cargs__print_help_options(FILE *stream, struct cargs_flag *flags)
 
         // now we are exactly at column 'indent'
         cargs__print_wrapped(stream, curr->description, indent, CARGS_HELP_WIDTH);
-        if (curr->default_str[0] != '\0') {
+        if (cargs_state.show_defaults && curr->default_str[0] != '\0') {
             fprintf(stream, " [default: %s]", curr->default_str);
         }
         fprintf(stream, "\n");
@@ -1164,7 +1170,7 @@ CARGSDEF void cargs__print_help_positionals(FILE *stream, struct cargs_positiona
             fprintf(stream, "  <%-*s>  ", max_name_len, curr->name);
 
         cargs__print_wrapped(stream, curr->description ? curr->description : "", indent, CARGS_HELP_WIDTH);
-        if (curr->optional && curr->default_value != NULL) {
+        if (cargs_state.show_defaults && curr->optional && curr->default_value != NULL) {
             fprintf(stream, " [default: %s]", curr->default_value);
         }
         fprintf(stream, "\n");
