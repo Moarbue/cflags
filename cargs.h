@@ -233,6 +233,7 @@ CARGSDEF struct cargs_flag **cargs__get_active_flags_head(void);
 CARGSDEF struct cargs_subcommand **cargs__get_active_subcommands_head(void);
 CARGSDEF struct cargs_positional **cargs__get_active_positionals_head(void);
 CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *long_name, const char *short_name);
+CARGSDEF const char *cargs__get_program_name(const char *path);
 CARGSDEF int cargs__evaluate_long_flag(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state);
 CARGSDEF int cargs__evaluate_short_cluster(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state);
 CARGSDEF bool cargs__find_short_flag(struct cargs_flag *head, char short_name, struct cargs_flag **flag);
@@ -441,7 +442,7 @@ CARGSDEF int cargs_parse(int argc, char **argv)
     enum CARGS_PARSE_STATE state = STATE_FETCH_TOKEN;
 
     int index = 1; // skip program name
-    cargs_state.program_name = argv[0];
+    cargs_state.program_name = cargs__get_program_name(argv[0]);
 
     char *token;
     struct cargs_flag *flag = NULL; // currently processed flag
@@ -715,6 +716,28 @@ CARGSDEF void cargs__check_duplicate_flags(struct cargs_flag *head, const char *
         if (short_name && head->short_name && head->short_name[0] == short_name[0]) cargs__panic("duplicate flag name: %c", short_name[0]);
         head = head->next;
     }
+}
+
+CARGSDEF const char *cargs__get_program_name(const char *path)
+{
+    if (!path) {
+        return NULL;
+    }
+
+    const char *last_slash = strrchr(path, '/');
+    const char *last_backslash = strrchr(path, '\\');
+    const char *filename = NULL;
+
+    // Determine which separator occurs latest in the string
+    if (last_slash && last_backslash) {
+        filename = (last_slash > last_backslash) ? last_slash : last_backslash;
+    } else if (last_slash) {
+        filename = last_slash;
+    } else {
+        filename = last_backslash;
+    }
+
+    return filename ? filename + 1 : path;
 }
 
 CARGSDEF int cargs__evaluate_long_flag(char **token_ptr, struct cargs_flag **out_flag, enum CARGS_PARSE_STATE *next_state)
